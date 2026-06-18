@@ -1,0 +1,28 @@
+{
+  "description": "High-level queue shape expectations for the mocked V1 baseline.",
+  "notes": [
+    "Queue is grouped by account rather than merged.",
+    "Category order is fixed even when counts are zero.",
+    "Message-level expectations are stored in expected_queue_snapshot.json."
+  ],
+  "account_count": 3,
+  "total_messages": 30,
+  "populated_categories_by_account": {
+    "family@example.net": [
+      "trash",
+      "bulk_mail",
+      "keep"
+    ],
+    "personal@example.com": [
+      "trash",
+      "bulk_mail",
+      "keep"
+    ],
+    "work@example.com": [
+      "trash",
+      "junk_review",
+      "bulk_mail",
+      "keep"
+    ]
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "account_order": [
+    "family@example.net",
+    "personal@example.com",
+    "work@example.com"
+  ],
+  "category_order": [
+    "trash",
+    "junk_review",
+    "bulk_mail",
+    "needs_review",
+    "keep"
+  ],
+  "accounts": {
+    "family@example.net": {
+      "bulk_mail": 2,
+      "junk_review": 0,
+      "keep": 5,
+      "needs_review": 0,
+      "trash": 1
+    },
+    "personal@example.com": {
+      "bulk_mail": 4,
+      "junk_review": 0,
+      "keep": 6,
+      "needs_review": 0,
+      "trash": 2
+    },
+    "work@example.com": {
+      "bulk_mail": 3,
+      "junk_review": 1,
+      "keep": 5,
+      "needs_review": 0,
+      "trash": 1
+    }
+  },
+  "sample_default_selected": {
+    "Photos from Sunday dinner": true,
+    "Urgent account reset requested": false,
+    "Your daily digest": true,
+    "Final notice: claim your package today": false
+  },
+  "message_expectations": {
+    "Photos from Sunday dinner": {
+      "account_email": "personal@example.com",
+      "category": "keep",
+      "confidence": 0.99,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": true
+    },
+    "Final notice: claim your package today": {
+      "account_email": "personal@example.com",
+      "category": "trash",
+      "confidence": 0.65,
+      "confidence_tolerance": 0.01,
+      "default_selected": false,
+      "protected": false
+    },
+    "Your daily digest": {
+      "account_email": "personal@example.com",
+      "category": "bulk_mail",
+      "confidence": 0.99,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": false
+    },
+    "Urgent account reset requested": {
+      "account_email": "work@example.com",
+      "category": "junk_review",
+      "confidence": 0.75,
+      "confidence_tolerance": 0.01,
+      "default_selected": false,
+      "protected": false
+    },
+    "Weekly digest: patio, paint, and repair ideas": {
+      "account_email": "family@example.net",
+      "category": "bulk_mail",
+      "confidence": 0.99,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": false
+    },
+    "Final notice about your tax refund": {
+      "account_email": "family@example.net",
+      "category": "keep",
+      "confidence": 0.82,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": true
+    },
+    "Payroll benefits update": {
+      "account_email": "work@example.com",
+      "category": "keep",
+      "confidence": 0.99,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": true
+    },
+    "Monthly product digest": {
+      "account_email": "work@example.com",
+      "category": "bulk_mail",
+      "confidence": 0.99,
+      "confidence_tolerance": 0.01,
+      "default_selected": true,
+      "protected": false
+    }
+  },
+  "total_messages": 30
+}

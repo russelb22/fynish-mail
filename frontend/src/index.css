@@ -1,0 +1,69 @@
+:root {
+  --paper: #f7efe4;
+  --paper-soft: #fdf9f2;
+  --ink: #241d18;
+  --ink-soft: #6c625a;
+  --line: rgba(63, 48, 36, 0.14);
+  --accent: #d86d45;
+  --accent-deep: #8f3c1f;
+  --blue-deep: #35588f;
+  --green-deep: #4f6f35;
+  --danger: #a54444;
+  --sans:
+    "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "SFMono-Regular", "Consolas", monospace;
+
+  font-family: var(--sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--paper-soft);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper-soft);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:hover,
+button:focus-visible {
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(216, 109, 69, 0.5);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul {
+  margin-top: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
