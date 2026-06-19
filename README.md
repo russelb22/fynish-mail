@@ -93,6 +93,8 @@ node --test auth.test.mjs
 
 Fynish was developed with an agentic coding workflow in mind. The repo includes implementation specs, feature notes, focused tests, and local validation commands so a tool like Codex, Cursor, Claude Code, or another coding agent can orient itself quickly.
 
+Coding agents should start with [AGENTS.md](AGENTS.md). For collaboration workflow, see [docs/AGENT_COLLABORATION_GUIDE.md](docs/AGENT_COLLABORATION_GUIDE.md).
+
 Good starting prompts for an agent:
 
 - "Read `README.md`, `docs/FYNISH_FUNCTIONAL_GUIDE.md`, and `docs/testing/TESTING_STRATEGY.md`, then summarize the current architecture."
@@ -142,6 +144,7 @@ Local secrets and runtime data are intentionally ignored by Git:
 Good starting points:
 
 - [docs/FYNISH_FUNCTIONAL_GUIDE.md](docs/FYNISH_FUNCTIONAL_GUIDE.md)
+- [docs/AGENT_COLLABORATION_GUIDE.md](docs/AGENT_COLLABORATION_GUIDE.md)
 - [docs/ACCOUNT_AUTHORIZATION_USE_CASES.md](docs/ACCOUNT_AUTHORIZATION_USE_CASES.md)
 - [docs/REVIEW_QUEUE_STAGED_COMMIT_IMPLEMENTATION_SPEC.md](docs/REVIEW_QUEUE_STAGED_COMMIT_IMPLEMENTATION_SPEC.md)
 - [docs/AUTO_KEEP_QUEUE_VISIBILITY_IMPLEMENTATION_SPEC.md](docs/AUTO_KEEP_QUEUE_VISIBILITY_IMPLEMENTATION_SPEC.md)
