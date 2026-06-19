@@ -1,6 +1,6 @@
 # Fynish Mail
 
-![Fynish Mail logo](frontend/src/assets/fynish-mail-logo.svg)
+![Fynish Mail masthead](docs/assets/fynish-mail-masthead.png)
 
 Fynish Mail is an open Gmail triage app in active V1 development, with an explainable queue, reusable rules, reversible actions, processed-mail history, and optional AI-assisted digest features.
 
