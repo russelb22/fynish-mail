@@ -2470,7 +2470,7 @@ function App() {
             <img className="brand-logo" src={fynishMailLogo} alt="Fynish Mail" />
             <div className="masthead-title">
               <div className="eyebrow">Gmail triage and workflow automation</div>
-              <h1 className="sr-only">Fynish Mail</h1>
+              <h1>Fynish Mail</h1>
             </div>
           </div>
 

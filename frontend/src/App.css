@@ -45,16 +45,19 @@
 }
 
 .masthead-brand {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
   min-width: 0;
 }
 
 .brand-logo {
   display: block;
-  width: min(420px, 100%);
+  width: clamp(86px, 10vw, 124px);
   height: auto;
-  border-radius: 16px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  box-shadow: 0 14px 32px rgba(35, 29, 24, 0.1);
 }
 
 .eyebrow {
@@ -1867,6 +1870,19 @@
 }
 
 @media (max-width: 720px) {
+  .masthead {
+    grid-template-columns: 1fr;
+  }
+
+  .masthead-session,
+  .masthead-stats {
+    justify-self: start;
+  }
+
+  .brand-logo {
+    width: 82px;
+  }
+
   .scroll-top-button {
     bottom: calc(18px + env(safe-area-inset-bottom));
     width: 44px;
