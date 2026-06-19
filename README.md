@@ -1,6 +1,8 @@
 # Fynish Mail
 
-Fynish is a local-first email triage prototype for reviewing unread Gmail Inbox mail with an explainable queue, reusable rules, reversible actions, processed-mail history, and optional AI-assisted digest features.
+![Fynish Mail logo](frontend/src/assets/fynish-mail-logo.svg)
+
+Fynish Mail is an open Gmail triage app in active V1 development, with an explainable queue, reusable rules, reversible actions, processed-mail history, and optional AI-assisted digest features.
 
 It is an active V1 project: useful, real, and still evolving.
 

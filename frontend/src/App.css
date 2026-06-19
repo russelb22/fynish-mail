@@ -25,11 +25,36 @@
 .masthead {
   display: grid;
   gap: 14px;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   border-radius: 24px;
   padding: 18px 22px;
   margin-bottom: 20px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.masthead-brand {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand-logo {
+  display: block;
+  width: min(420px, 100%);
+  height: auto;
+  border-radius: 16px;
 }
 
 .eyebrow {

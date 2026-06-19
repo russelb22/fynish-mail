@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="420" viewBox="0 0 1180 420" role="img" aria-labelledby="title desc">
+  <title id="title">Fynish Mail</title>
+  <desc id="desc">A stylized Fy monogram beside the Fynish Mail wordmark.</desc>
+  <rect width="1180" height="420" rx="34" fill="#fbf5e7"/>
+  <g transform="translate(70 54)">
+    <text x="0" y="185"
+      font-family="Georgia, 'Times New Roman', serif"
+      font-size="198"
+      font-style="italic"
+      font-weight="700"
+      fill="#23221e">F</text>
+    <text x="98" y="254"
+      font-family="Georgia, 'Times New Roman', serif"
+      font-size="238"
+      font-style="italic"
+      font-weight="700"
+      fill="#f26b2d">y</text>
+    <path d="M152 264 C182 312 226 292 278 226"
+      fill="none"
+      stroke="#f26b2d"
+      stroke-width="15"
+      stroke-linecap="round"
+      opacity="0.92"/>
+    <text x="355" y="172"
+      font-family="Inter, Avenir, Helvetica, Arial, sans-serif"
+      font-size="108"
+      font-weight="760"
+      letter-spacing="-4"
+      fill="#24231f">Fynish Mail</text>
+    <path d="M359 205 H1006"
+      stroke="#24231f"
+      stroke-width="3"
+      stroke-linecap="round"
+      opacity="0.08"/>
+  </g>
+</svg>

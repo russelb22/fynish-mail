@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import fynishMailLogo from './assets/fynish-mail-logo.svg'
 import {
   ApiError,
   approveWritingStyleCard,
@@ -2465,9 +2466,12 @@ function App() {
     <div className="app-shell">
       <div className="app-frame">
         <section className="masthead">
-          <div className="masthead-title">
-            <div className="eyebrow">Local-first Gmail triage</div>
-            <h1>Fynish</h1>
+          <div className="masthead-brand">
+            <img className="brand-logo" src={fynishMailLogo} alt="Fynish Mail" />
+            <div className="masthead-title">
+              <div className="eyebrow">Gmail triage and workflow automation</div>
+              <h1 className="sr-only">Fynish Mail</h1>
+            </div>
           </div>
 
           {authStatus.auth_enabled ? (
