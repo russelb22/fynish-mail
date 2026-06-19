@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="316" viewBox="0 0 1200 316" role="img" aria-labelledby="title desc">
+  <title id="title">Fynish Mail masthead</title>
+  <desc id="desc">Fynish Mail logo mark with Gmail triage and workflow automation masthead text.</desc>
+  <rect width="1200" height="316" fill="#fffcf7"/>
+
+  <g transform="translate(22 18)">
+    <rect width="284" height="266" rx="34" fill="#ffffff"/>
+    <text x="18" y="184" font-family="Georgia, 'Times New Roman', serif" font-size="224" font-weight="700" fill="#0b3d6d">F</text>
+    <text x="140" y="180" font-family="Georgia, 'Times New Roman', serif" font-size="224" font-weight="700" fill="#ff5a1f">y</text>
+  </g>
+
+  <g transform="translate(350 81)">
+    <text x="0" y="23" font-family="Avenir Next, Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="31" font-weight="500" letter-spacing="2" fill="#6c625a">GMAIL TRIAGE AND WORKFLOW AUTOMATION</text>
+    <text x="0" y="125" font-family="Avenir Next, Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="102" font-weight="760" fill="#241d18">Fynish Mail</text>
+  </g>
+</svg>
