@@ -496,6 +496,138 @@ _MESSAGES = {
     ],
 }
 
+_SPAM_MESSAGES = {
+    "personal@example.com": [
+        {
+            "gmail_message_id": "ps-9001",
+            "gmail_thread_id": "pst-1",
+            "sender": "County Water Utility <billing@water.example.gov>",
+            "reply_to": "billing@water.example.gov",
+            "recipient_to": "personal@example.com",
+            "recipient_cc": "",
+            "subject": "Invoice receipt for utility service",
+            "received_at": "2026-05-03T08:30:00Z",
+            "snippet": "Your utility invoice receipt is ready.",
+            "body_preview": "Your water utility invoice receipt is ready for review. Please keep this receipt for your records.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+        {
+            "gmail_message_id": "ps-9002",
+            "gmail_thread_id": "pst-2",
+            "sender": "Prize Center <claim@winner-promo.top>",
+            "reply_to": "claim@winner-promo.top",
+            "recipient_to": "personal@example.com",
+            "recipient_cc": "",
+            "subject": "Final notice: claim your reward today",
+            "received_at": "2026-05-03T07:20:00Z",
+            "snippet": "Click now to release your prize.",
+            "body_preview": "Final notice. Claim your reward today and confirm your payment details before midnight.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+        {
+            "gmail_message_id": "ps-9003",
+            "gmail_thread_id": "pst-3",
+            "sender": "Kitchen Mailer <hello@recipe-box.co>",
+            "reply_to": "hello@recipe-box.co",
+            "recipient_to": "personal@example.com",
+            "recipient_cc": "",
+            "subject": "This week's dinner newsletter",
+            "received_at": "2026-05-03T06:45:00Z",
+            "snippet": "A fresh digest of weeknight recipes.",
+            "body_preview": "This newsletter includes a weekly digest of recipes, grocery shortcuts, discounts, and unsubscribe options.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {
+                "List-Unsubscribe": "<mailto:leave@recipe-box.co>",
+                "List-ID": "newsletter.recipe-box",
+            },
+            "has_attachments": 0,
+        },
+        {
+            "gmail_message_id": "ps-9004",
+            "gmail_thread_id": "pst-4",
+            "sender": "Aunt May <aunt.may@example.org>",
+            "reply_to": "aunt.may@example.org",
+            "recipient_to": "personal@example.com",
+            "recipient_cc": "",
+            "subject": "Photos from Sunday dinner",
+            "received_at": "2026-05-03T06:10:00Z",
+            "snippet": "I found a few more photos.",
+            "body_preview": "I found a few more family photos from Sunday dinner and wanted to send thanks for hosting.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 1,
+        },
+    ],
+    "work@example.com": [
+        {
+            "gmail_message_id": "ws-9101",
+            "gmail_thread_id": "wst-1",
+            "sender": "Recruiter Team <jobs@talent-partners.com>",
+            "reply_to": "jobs@talent-partners.com",
+            "recipient_to": "work@example.com",
+            "recipient_cc": "",
+            "subject": "Following up on your application",
+            "received_at": "2026-05-03T09:10:00Z",
+            "snippet": "We'd love to schedule a conversation.",
+            "body_preview": "Thanks for applying. We would like to schedule a conversation about the job and next recruiting steps this week.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+        {
+            "gmail_message_id": "ws-9102",
+            "gmail_thread_id": "wst-2",
+            "sender": "IT Support <support@corp-example.com>",
+            "reply_to": "password-reset@external-reset.help",
+            "recipient_to": "work@example.com",
+            "recipient_cc": "",
+            "subject": "Account recovery request",
+            "received_at": "2026-05-03T08:05:00Z",
+            "snippet": "A recovery request was started.",
+            "body_preview": "An account recovery request was started for your work account. Review this security alert if it was not you.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+    ],
+    "family@example.net": [
+        {
+            "gmail_message_id": "fs-9201",
+            "gmail_thread_id": "fst-1",
+            "sender": "School District <notices@schooldistrict.edu>",
+            "reply_to": "notices@schooldistrict.edu",
+            "recipient_to": "family@example.net",
+            "recipient_cc": "",
+            "subject": "School schedule update",
+            "received_at": "2026-05-03T07:45:00Z",
+            "snippet": "Adjusted bus times for Monday morning.",
+            "body_preview": "Please review the updated school schedule and bus timing for Monday due to district maintenance.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+        {
+            "gmail_message_id": "fs-9202",
+            "gmail_thread_id": "fst-2",
+            "sender": "Tax Filing Center <review@refund-release.ru>",
+            "reply_to": "review@refund-release.ru",
+            "recipient_to": "family@example.net",
+            "recipient_cc": "",
+            "subject": "Final notice about your tax refund",
+            "received_at": "2026-05-03T06:35:00Z",
+            "snippet": "Review your refund status immediately.",
+            "body_preview": "Final notice about your tax refund. Click to review status today and confirm banking details for release.",
+            "gmail_labels": ["SPAM", "UNREAD"],
+            "headers": {},
+            "has_attachments": 0,
+        },
+    ],
+}
+
 
 def get_mock_accounts() -> list[str]:
     return deepcopy(MOCK_ACCOUNTS)
@@ -503,3 +635,7 @@ def get_mock_accounts() -> list[str]:
 
 def get_mock_messages(account_email: str) -> list[dict]:
     return deepcopy(_MESSAGES.get(account_email, []))
+
+
+def get_mock_spam_messages(account_email: str) -> list[dict]:
+    return deepcopy(_SPAM_MESSAGES.get(account_email, []))
