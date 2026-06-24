@@ -19,6 +19,8 @@ import type {
   SpamRescueQueueResponse,
   StagedQueueCommitAction,
   StagedQueueCommitResponse,
+  StagedSpamRescueCommitAction,
+  StagedSpamRescueCommitResponse,
   WritingStyleCard,
 } from './types'
 
@@ -226,6 +228,16 @@ export function fetchReviewQueue() {
 
 export function fetchSpamRescueQueue() {
   return request<SpamRescueQueueResponse>('/spam-rescue')
+}
+
+export function commitStagedSpamRescueActions(payload: {
+  idempotency_key: string
+  actions: StagedSpamRescueCommitAction[]
+}) {
+  return request<StagedSpamRescueCommitResponse>('/spam-rescue/staged-actions/commit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function commitStagedQueueActions(payload: {

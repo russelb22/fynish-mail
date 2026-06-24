@@ -1449,6 +1449,21 @@
   margin-top: 12px;
 }
 
+.spam-rescue-staged-panel {
+  margin-top: 16px;
+}
+
+.spam-rescue-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.spam-rescue-actions button {
+  flex: 0 1 auto;
+}
+
 .queue-bootstrap-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
@@ -1988,6 +2003,10 @@
 
   .spam-rescue-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .spam-rescue-actions button {
+    flex: 1 1 180px;
   }
 
 }

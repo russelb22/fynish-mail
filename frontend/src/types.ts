@@ -6,6 +6,8 @@ export type Category =
   | 'keep'
 
 export type RuleAction = Category
+export type SpamRescueAction = 'restore_to_inbox' | 'leave_in_spam'
+export type ProcessedAction = Category | SpamRescueAction
 
 export interface ReviewMessage {
   id: number
@@ -122,6 +124,35 @@ export interface SpamRescueAccount {
 export interface SpamRescueQueueResponse {
   accounts: SpamRescueAccount[]
   count: number
+}
+
+export interface StagedSpamRescueCommitAction {
+  client_action_id: string
+  account_email: string
+  gmail_message_id: string
+  action: SpamRescueAction
+  expected_version: string | null
+}
+
+export interface StagedSpamRescueCommitResult {
+  client_action_id: string | null
+  candidate_id: string
+  account_email: string
+  gmail_message_id: string
+  action: SpamRescueAction
+  status: 'committed' | 'failed' | 'stale' | 'blocked'
+  code: string | null
+  message: string
+  executed: boolean
+  labels_added: string[]
+  labels_removed: string[]
+}
+
+export interface StagedSpamRescueCommitResponse {
+  committed_count: number
+  failed_count: number
+  idempotent_replay?: boolean
+  results: StagedSpamRescueCommitResult[]
 }
 
 export interface DigestSenderStatus {
@@ -250,8 +281,8 @@ export interface ProcessedMessage {
   sender_domain: string
   subject: string
   preview: string
-  selected_action: Category
-  recommended_action: Category
+  selected_action: ProcessedAction
+  recommended_action: Category | 'spam_rescue'
   user_overrode: boolean
   action_source: string
   created_rule_id: number | null

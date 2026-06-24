@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 Category = Literal["trash", "junk_review", "bulk_mail", "needs_review", "keep"]
+SpamRescueAction = Literal["restore_to_inbox", "leave_in_spam"]
 
 
 class AccountOut(BaseModel):
@@ -73,6 +74,19 @@ class StagedActionCommitItem(BaseModel):
 class StagedActionsCommitRequest(BaseModel):
     idempotency_key: str = Field(min_length=1)
     actions: list[StagedActionCommitItem] = Field(min_length=1)
+
+
+class SpamRescueActionCommitItem(BaseModel):
+    client_action_id: str | None = None
+    account_email: str
+    gmail_message_id: str
+    action: SpamRescueAction
+    expected_version: str | None = None
+
+
+class SpamRescueActionsCommitRequest(BaseModel):
+    idempotency_key: str = Field(min_length=1)
+    actions: list[SpamRescueActionCommitItem] = Field(min_length=1)
 
 
 class RuleCreateRequest(BaseModel):
