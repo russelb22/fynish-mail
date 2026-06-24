@@ -16,6 +16,7 @@ import type {
   ReminderSummary,
   ReviewQueueResponse,
   Rule,
+  SpamRescueQueueResponse,
   StagedQueueCommitAction,
   StagedQueueCommitResponse,
   WritingStyleCard,
@@ -221,6 +222,10 @@ export function syncUnread() {
 
 export function fetchReviewQueue() {
   return request<ReviewQueueResponse>('/review-queue')
+}
+
+export function fetchSpamRescueQueue() {
+  return request<SpamRescueQueueResponse>('/spam-rescue')
 }
 
 export function commitStagedQueueActions(payload: {

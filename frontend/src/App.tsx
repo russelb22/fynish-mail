@@ -23,6 +23,7 @@ import {
   fetchNotificationSettings,
   fetchProcessedMessages,
   fetchReviewQueue,
+  fetchSpamRescueQueue,
   fetchWritingStyleCards,
   recoverProcessedMessage,
   fetchRules,
@@ -52,10 +53,12 @@ import type {
   ReviewAccount,
   ReviewMessage,
   Rule,
+  SpamRescueAccount,
+  SpamRescueMessage,
   WritingStyleCard,
 } from './types'
 
-type ViewName = 'queue' | 'processed' | 'rules' | 'accounts' | 'settings'
+type ViewName = 'queue' | 'spam_rescue' | 'processed' | 'rules' | 'accounts' | 'settings'
 
 type ActionMap = Record<number, Category>
 type SettingsFieldErrors = Partial<Record<'recipient_email' | 'digest_time' | 'timezone', string>>
@@ -132,13 +135,14 @@ const REVIEW_QUEUE_KEYBOARD_ACTIONS: Record<string, Category> = {
   '3': 'junk_review',
   '4': 'trash',
 }
-const SCROLL_TOP_VIEWS = new Set<ViewName>(['queue', 'processed', 'rules'])
+const SCROLL_TOP_VIEWS = new Set<ViewName>(['queue', 'spam_rescue', 'processed', 'rules'])
 const SCROLL_TOP_SHOW_THRESHOLD = 360
 const SCROLL_TOP_HIDE_THRESHOLD = 240
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   auto_response_drafts: false,
   auto_response_send: false,
   writing_style_cards: false,
+  spam_rescue: false,
 }
 
 function formatActionSource(source: string | null | undefined) {
@@ -283,6 +287,17 @@ function buildPreviewText(message: ReviewMessage) {
   return cleanPreviewText(snippet || bodyPreview || 'No preview available.')
 }
 
+function buildSpamRescuePreviewText(message: SpamRescueMessage) {
+  const snippet = message.snippet?.trim()
+  const bodyPreview = message.body_preview?.trim()
+
+  if (snippet && bodyPreview && bodyPreview !== snippet) {
+    return cleanPreviewText(`${snippet} ${bodyPreview}`.trim())
+  }
+
+  return cleanPreviewText(snippet || bodyPreview || 'No preview available.')
+}
+
 function formatProvider(provider: string) {
   if (provider === 'gmail_readonly') {
     return 'Google Gmail'
@@ -397,6 +412,7 @@ function parseInitialUiState(): { view: ViewName | null; notice: string | null }
   const view: ViewName | null =
     hasOauthStatus && (
       rawView === 'queue' ||
+      rawView === 'spam_rescue' ||
       rawView === 'processed' ||
       rawView === 'rules' ||
       rawView === 'accounts' ||
@@ -433,6 +449,7 @@ function App() {
   const [view, setView] = useState<ViewName>(initialUiState.view ?? 'queue')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [queue, setQueue] = useState<ReviewAccount[]>([])
+  const [spamRescueQueue, setSpamRescueQueue] = useState<SpamRescueAccount[]>([])
   const [processedMessages, setProcessedMessages] = useState<ProcessedMessage[]>([])
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null)
   const [digestSenderStatus, setDigestSenderStatus] = useState<DigestSenderStatus | null>(null)
@@ -511,6 +528,9 @@ function App() {
       const styleCardsData = featureData.features.writing_style_cards
         ? await fetchWritingStyleCards()
         : { cards: [] }
+      const spamRescueData = featureData.features.spam_rescue
+        ? await fetchSpamRescueQueue()
+        : { accounts: [], count: 0 }
       setProcessedMessages(processedData.messages)
       setExpandedProcessedId((current) =>
         current !== null && processedData.messages.some((message) => message.id === current)
@@ -522,6 +542,7 @@ function App() {
       setRules(ruleData.rules)
       setAuthStatus(authData)
       setFeatureFlags(featureData.features)
+      setSpamRescueQueue(spamRescueData.accounts)
       setNotificationSettings(settingsData.settings)
       setDigestSenderStatus(digestSenderData)
       setAiDigestAttentionNotes(attentionNotesData.notes)
@@ -570,7 +591,9 @@ function App() {
     }
 
     if (!SCROLL_TOP_VIEWS.has(view)) {
-      setShowScrollTopButton(false)
+      window.requestAnimationFrame(() => {
+        setShowScrollTopButton(false)
+      })
       return
     }
 
@@ -644,6 +667,20 @@ function App() {
     [accountMap, canUseDevelopmentHarness, queue, showMockAccounts],
   )
 
+  const visibleSpamRescueQueue = useMemo(
+    () =>
+      spamRescueQueue
+        .map((account) => {
+          const accountInfo = accountMap[account.account_email]
+          if (isMockAccount(accountInfo) && !(canUseDevelopmentHarness && showMockAccounts)) {
+            return null
+          }
+          return account
+        })
+        .filter((account): account is SpamRescueAccount => Boolean(account)),
+    [accountMap, canUseDevelopmentHarness, showMockAccounts, spamRescueQueue],
+  )
+
   const activeVisibleQueue = useMemo(
     () =>
       visibleQueue.map((account) => ({
@@ -694,6 +731,11 @@ function App() {
       totalMessages,
     }
   }, [activeVisibleQueue])
+
+  const visibleSpamRescueCount = useMemo(
+    () => visibleSpamRescueQueue.reduce((total, account) => total + account.messages.length, 0),
+    [visibleSpamRescueQueue],
+  )
 
   const monitoredQueueAccounts = useMemo(
     () =>
@@ -1471,6 +1513,105 @@ function App() {
   function handleRowActionClick(message: ReviewMessage, action: Category) {
     stageSingleAction(message, action)
   }
+
+  const renderSpamRescue = () => (
+    <section className="panel spam-rescue-panel">
+      <div className="queue-controls">
+        <div>
+          <h2>Spam Rescue</h2>
+          <p className="subtle">
+            Recent unread Spam messages with rescue signals.
+          </p>
+        </div>
+        <div className="spam-rescue-summary" aria-label="Spam Rescue snapshot">
+          <div className="summary-stat">
+            <strong>{visibleSpamRescueQueue.length}</strong>
+            <span>Accounts</span>
+          </div>
+          <div className="summary-stat">
+            <strong>{visibleSpamRescueCount}</strong>
+            <span>Candidates</span>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="empty-state">Loading Spam Rescue candidates...</div>
+      ) : visibleSpamRescueCount === 0 ? (
+        <div className="empty-state">No likely Spam false positives found.</div>
+      ) : (
+        visibleSpamRescueQueue.map((account) => (
+          <section key={account.account_email} className="account-card spam-rescue-account">
+            <div className="account-header">
+              <div className="account-title">
+                <h2>{account.account_email}</h2>
+                <span className="pill">Spam</span>
+              </div>
+              <div className="message-meta">Candidates: {account.messages.length}</div>
+            </div>
+
+            <div className="message-list">
+              {account.messages.map((message) => (
+                <article key={message.id} className="message-row spam-rescue-row">
+                  <div className="row-main">
+                    <div>
+                      <div className="row-topline">
+                        <div className="sender-line">
+                          <span className="classification-pill classification-pill-review">
+                            <span>Rescue</span>
+                            <span>{formatConfidencePercent(message.confidence)}</span>
+                          </span>
+                          <strong>{message.sender}</strong>
+                          <span className="message-meta">{message.sender_domain}</span>
+                        </div>
+                        <span className="spam-source-pill">Spam</span>
+                        {message.protection_reasons.length > 0 ? (
+                          <span className="safety-pill">Protected</span>
+                        ) : null}
+                      </div>
+
+                      <div className="subject-line">
+                        <strong>{message.subject}</strong>
+                        <span className="message-meta">{formatRelativeDate(message.received_at)}</span>
+                        {message.has_attachments ? <span className="message-meta">Attachment</span> : null}
+                      </div>
+
+                      <div className="message-preview spam-rescue-preview">
+                        <strong className="message-detail-label">Preview</strong>
+                        <p>{buildSpamRescuePreviewText(message)}</p>
+                      </div>
+
+                      <div className="spam-rescue-detail-grid">
+                        <div>
+                          <strong className="message-detail-label">Rescue reasons</strong>
+                          <ul className="reason-list queue-reason-list">
+                            {message.rescue_reasons.map((reason) => (
+                              <li key={reason}>{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {message.protection_reasons.length > 0 ? (
+                          <div>
+                            <strong className="message-detail-label">Protected signals</strong>
+                            <ul className="protection-list">
+                              {message.protection_reasons.map((reason) => (
+                                <li key={reason}>{reason}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+    </section>
+  )
 
   const renderQueue = () => (
     <section className="panel">
@@ -2511,6 +2652,7 @@ function App() {
           <nav className="section-tabs" aria-label="Primary navigation">
             {([
               ['queue', 'Review Queue'],
+              ...(featureFlags.spam_rescue ? [['spam_rescue', 'Spam Rescue'] as [ViewName, string]] : []),
               ['processed', 'Processed Mail'],
               ['rules', 'Rules'],
               ['accounts', 'Accounts'],
@@ -2529,6 +2671,7 @@ function App() {
         </div>
 
         {view === 'queue' ? renderQueue() : null}
+        {view === 'spam_rescue' ? renderSpamRescue() : null}
         {view === 'processed' ? renderProcessed() : null}
         {view === 'rules' ? renderRules() : null}
         {view === 'accounts' ? renderAccounts() : null}
