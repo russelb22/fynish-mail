@@ -98,6 +98,7 @@ from app.services.review_queue import (
     reclassify_pending_messages,
     sync_unread_messages,
 )
+from app.services.spam_rescue import get_spam_rescue_queue
 from app.services.rules import create_rule, delete_rule, list_rules, update_rule
 from app.services.staged_commit import (
     StagedCommitAction,
@@ -122,6 +123,7 @@ def feature_flags(current_user: CurrentUser = Depends(require_current_user)):
             "auto_response_drafts": auto_response_drafts_allowed_for_email(current_user.email),
             "auto_response_send": auto_response_send_allowed_for_email(current_user.email),
             "writing_style_cards": writing_style_cards_allowed_for_email(current_user.email),
+            "spam_rescue": config.SPAM_RESCUE_ENABLED,
         }
     }
 
@@ -307,6 +309,13 @@ def scheduled_send_digests():
 @router.get("/review-queue")
 def review_queue(current_user: CurrentUser = Depends(require_current_user)):
     return get_review_queue(user_id=current_user.id)
+
+
+@router.get("/spam-rescue")
+def spam_rescue_queue(current_user: CurrentUser = Depends(require_current_user)):
+    if not config.SPAM_RESCUE_ENABLED:
+        raise HTTPException(status_code=404, detail="Spam Rescue is not enabled.")
+    return get_spam_rescue_queue(user_id=current_user.id)
 
 
 @router.post("/review-queue/staged-actions/commit")
