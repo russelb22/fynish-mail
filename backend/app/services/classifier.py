@@ -78,6 +78,15 @@ class ClassificationResult:
     matched_rule_ids: list[int]
 
 
+@dataclass
+class SpamRescueResult:
+    should_surface: bool
+    confidence: float
+    reasons: list[str]
+    protection_reasons: list[str]
+    matched_rule_ids: list[int]
+
+
 def extract_email(value: str | None) -> str:
     if not value:
         return ""
@@ -104,6 +113,33 @@ def _contains_any(text: str, needles: set[str]) -> list[str]:
     return sorted(found)
 
 
+def _matching_rules(
+    *,
+    rules: list[dict],
+    sender_email: str,
+    sender_domain: str,
+    subject: str,
+    body: str,
+    headers: dict,
+) -> list[dict]:
+    matching_rules = []
+    for rule in rules:
+        if not rule["enabled"]:
+            continue
+        pattern = _normalize(rule["pattern"])
+        if rule["rule_type"] == "sender" and sender_email == pattern:
+            matching_rules.append(rule)
+        elif rule["rule_type"] == "domain" and sender_domain == pattern:
+            matching_rules.append(rule)
+        elif rule["rule_type"] == "subject_contains" and pattern in subject:
+            matching_rules.append(rule)
+        elif rule["rule_type"] == "body_contains" and pattern in body:
+            matching_rules.append(rule)
+        elif rule["rule_type"] == "list_id" and pattern in _normalize(headers.get("List-ID")):
+            matching_rules.append(rule)
+    return matching_rules
+
+
 def classify_message(
     message: dict,
     rules: list[dict],
@@ -126,21 +162,14 @@ def classify_message(
         "trash": 0.0,
     }
 
-    matching_rules = []
-    for rule in rules:
-        if not rule["enabled"]:
-            continue
-        pattern = _normalize(rule["pattern"])
-        if rule["rule_type"] == "sender" and sender_email == pattern:
-            matching_rules.append(rule)
-        elif rule["rule_type"] == "domain" and sender_domain == pattern:
-            matching_rules.append(rule)
-        elif rule["rule_type"] == "subject_contains" and pattern in subject:
-            matching_rules.append(rule)
-        elif rule["rule_type"] == "body_contains" and pattern in body:
-            matching_rules.append(rule)
-        elif rule["rule_type"] == "list_id" and pattern in _normalize(headers.get("List-ID")):
-            matching_rules.append(rule)
+    matching_rules = _matching_rules(
+        rules=rules,
+        sender_email=sender_email,
+        sender_domain=sender_domain,
+        subject=subject,
+        body=body,
+        headers=headers,
+    )
 
     keep_rules = [rule for rule in matching_rules if rule["action"] == "keep"]
     if keep_rules:
@@ -273,3 +302,131 @@ def classify_message(
 
 def serialize_headers(headers: dict) -> str:
     return json.dumps(headers)
+
+
+def classify_spam_rescue_candidate(
+    message: dict,
+    rules: list[dict],
+    history_by_sender: Counter,
+    history_by_domain: Counter,
+) -> SpamRescueResult:
+    sender_email = extract_email(message.get("sender"))
+    sender_domain = extract_domain(message.get("sender"))
+    subject = _normalize(message.get("subject"))
+    body = _normalize(message.get("body_preview"))
+    combined = f"{subject}\n{body}"
+    headers = message.get("headers") or {}
+
+    reasons: list[str] = []
+    suppression_reasons: list[str] = []
+    protection_reasons: list[str] = []
+    rescue_score = 0.0
+    suppression_score = 0.0
+
+    matching_rules = _matching_rules(
+        rules=rules,
+        sender_email=sender_email,
+        sender_domain=sender_domain,
+        subject=subject,
+        body=body,
+        headers=headers,
+    )
+    keep_rules = [rule for rule in matching_rules if rule["action"] == "keep"]
+    suppression_rules = [
+        rule
+        for rule in matching_rules
+        if rule["action"] in {"bulk_mail", "junk_review", "trash"}
+    ]
+
+    if suppression_rules:
+        action = suppression_rules[0]["action"].replace("_", " ")
+        return SpamRescueResult(
+            should_surface=False,
+            confidence=0.95,
+            reasons=[f"Explicit {action} rule matched"],
+            protection_reasons=[],
+            matched_rule_ids=[rule["id"] for rule in suppression_rules],
+        )
+
+    if keep_rules:
+        reasons.append("Explicit Always Keep rule matched")
+        rescue_score += 0.7
+
+    protected_hits = _contains_any(combined, PROTECTED_KEYWORDS)
+    if protected_hits:
+        protection_reasons.append(
+            f"Protected keywords detected: {', '.join(protected_hits[:3])}"
+        )
+        reasons.append(protection_reasons[-1])
+        rescue_score += 0.45
+
+    sender_keep_hits = history_by_sender.get(f"{sender_email}:keep", 0)
+    domain_keep_hits = history_by_domain.get(f"{sender_domain}:keep", 0)
+    if sender_keep_hits:
+        reasons.append("Sender previously kept")
+        rescue_score += 0.4
+    if domain_keep_hits:
+        reasons.append("Sender domain previously kept")
+        rescue_score += 0.35
+
+    keep_hits = _contains_any(combined, KEEP_KEYWORDS)
+    if keep_hits:
+        reasons.append(
+            f"Personal or conversational wording detected: {', '.join(keep_hits[:2])}"
+        )
+        rescue_score += min(0.25, 0.06 * len(keep_hits))
+
+    trash_hits = _contains_any(combined, TRASH_KEYWORDS)
+    if trash_hits:
+        suppression_reasons.append(
+            f"Spam-like urgency detected: {', '.join(trash_hits[:3])}"
+        )
+        suppression_score += min(0.5, 0.12 * len(trash_hits))
+
+    if message.get("reply_to") and extract_domain(message.get("reply_to")) != sender_domain:
+        suppression_reasons.append("Reply-To domain does not match sender domain")
+        suppression_score += 0.35
+
+    if sender_domain and any(sender_domain.endswith(f".{hint}") for hint in SUSPICIOUS_DOMAIN_HINTS):
+        suppression_reasons.append("Suspicious sender domain")
+        suppression_score += 0.25
+
+    if headers.get("List-Unsubscribe") or headers.get("List-ID"):
+        suppression_reasons.append("Bulk-list headers found")
+        suppression_score += 0.25
+
+    bulk_hits = _contains_any(combined, BULK_KEYWORDS)
+    if bulk_hits:
+        suppression_reasons.append(
+            f"Promotional wording detected: {', '.join(bulk_hits[:3])}"
+        )
+        suppression_score += min(0.35, 0.08 * len(bulk_hits))
+
+    has_strong_rescue_signal = bool(keep_rules or sender_keep_hits or domain_keep_hits)
+    high_risk_without_history = (
+        suppression_score >= 0.55
+        and not has_strong_rescue_signal
+    )
+    should_surface = rescue_score >= 0.45 and not high_risk_without_history
+
+    if should_surface and suppression_reasons:
+        reasons.append(f"Risk signals also present: {suppression_reasons[0]}")
+
+    if not should_surface:
+        reasons = reasons + suppression_reasons
+        if not reasons:
+            reasons.append("No rescue signals found")
+
+    confidence = (
+        max(0.5, min(0.99, 0.55 + rescue_score - min(suppression_score, 0.4)))
+        if should_surface
+        else max(0.35, min(0.95, 0.45 + suppression_score - min(rescue_score, 0.25)))
+    )
+
+    return SpamRescueResult(
+        should_surface=should_surface,
+        confidence=round(confidence, 2),
+        reasons=reasons[:4],
+        protection_reasons=protection_reasons,
+        matched_rule_ids=[rule["id"] for rule in keep_rules],
+    )
