@@ -27,7 +27,7 @@ test('review queue loads mocked accounts and compact empty category chips', asyn
   await expect(page.locator('.empty-group-chip').first()).toBeVisible()
 })
 
-test('spam rescue renders read-only mock candidates', async ({ page }) => {
+test('spam rescue stages and commits mock candidates', async ({ page }) => {
   await page.goto('/')
   await enableMockAccounts(page)
   await refreshQueue(page)
@@ -35,9 +35,18 @@ test('spam rescue renders read-only mock candidates', async ({ page }) => {
   await page.getByRole('button', { name: 'Spam Rescue' }).click()
 
   await expect(page.getByRole('heading', { name: 'Spam Rescue' })).toBeVisible()
-  await expect(page.locator('.spam-rescue-row').filter({ hasText: 'Invoice receipt for utility service' })).toBeVisible()
+  const invoiceCandidate = page.locator('.spam-rescue-row').filter({ hasText: 'Invoice receipt for utility service' })
+  await expect(invoiceCandidate).toBeVisible()
   await expect(page.locator('.spam-rescue-row').filter({ hasText: 'Final notice: claim your reward today' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Restore/i })).toHaveCount(0)
+
+  await invoiceCandidate.getByRole('button', { name: 'Restore to Inbox' }).click()
+  await expect(page.getByText('1 Spam Rescue change staged')).toBeVisible()
+  await expect(page.locator('.staged-queue-item').filter({ hasText: 'Invoice receipt for utility service' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Commit Changes' }).click()
+
+  await expect(page.getByText('Committed 1 Spam Rescue change.')).toBeVisible()
+  await expect(page.locator('.spam-rescue-row').filter({ hasText: 'Invoice receipt for utility service' })).toHaveCount(0)
 })
 
 test('keyboard shortcuts stage and undo the next queue message', async ({

@@ -16,6 +16,7 @@ from app.schemas.api import (
     NotificationSettingsUpdateRequest,
     RuleCreateRequest,
     RuleUpdateRequest,
+    SpamRescueActionsCommitRequest,
     StagedActionsCommitRequest,
     WritingStyleCardCreateRequest,
     WritingStyleCardUpdateRequest,
@@ -98,7 +99,11 @@ from app.services.review_queue import (
     reclassify_pending_messages,
     sync_unread_messages,
 )
-from app.services.spam_rescue import get_spam_rescue_queue
+from app.services.spam_rescue import (
+    SpamRescueCommitAction,
+    commit_spam_rescue_actions,
+    get_spam_rescue_queue,
+)
 from app.services.rules import create_rule, delete_rule, list_rules, update_rule
 from app.services.staged_commit import (
     StagedCommitAction,
@@ -316,6 +321,29 @@ def spam_rescue_queue(current_user: CurrentUser = Depends(require_current_user))
     if not config.SPAM_RESCUE_ENABLED:
         raise HTTPException(status_code=404, detail="Spam Rescue is not enabled.")
     return get_spam_rescue_queue(user_id=current_user.id)
+
+
+@router.post("/spam-rescue/staged-actions/commit")
+def commit_staged_spam_rescue_actions(
+    payload: SpamRescueActionsCommitRequest,
+    current_user: CurrentUser = Depends(require_current_user),
+):
+    if not config.SPAM_RESCUE_ENABLED:
+        raise HTTPException(status_code=404, detail="Spam Rescue is not enabled.")
+    return commit_spam_rescue_actions(
+        [
+            SpamRescueCommitAction(
+                client_action_id=item.client_action_id,
+                account_email=item.account_email,
+                gmail_message_id=item.gmail_message_id,
+                action=item.action,
+                expected_version=item.expected_version,
+            )
+            for item in payload.actions
+        ],
+        idempotency_key=payload.idempotency_key,
+        user_id=current_user.id,
+    )
 
 
 @router.post("/review-queue/staged-actions/commit")

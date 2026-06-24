@@ -4,6 +4,7 @@ import fynishMailLogo from './assets/fynish-mail-logo.svg'
 import {
   ApiError,
   approveWritingStyleCard,
+  commitStagedSpamRescueActions,
   commitStagedQueueActions,
   connectGmailModifyAccount,
   connectMockAccount,
@@ -53,6 +54,7 @@ import type {
   ReviewAccount,
   ReviewMessage,
   Rule,
+  SpamRescueAction,
   SpamRescueAccount,
   SpamRescueMessage,
   WritingStyleCard,
@@ -86,6 +88,19 @@ type StagedQueueAction = {
     action: Category
   }
 }
+type StagedSpamRescueAction = {
+  clientActionId: string
+  candidateId: string
+  accountEmail: string
+  gmailMessageId: string
+  sender: string
+  senderDomain: string
+  subject: string
+  action: SpamRescueAction
+  actionLabel: string
+  expectedVersion: string | null
+  stagedAt: string
+}
 type FailedSyncAccount = {
   account_email: string
   provider: string
@@ -113,12 +128,19 @@ const QUEUE_CLASSIFICATION_LABELS: Record<Category, string> = {
   keep: 'Keep',
 }
 
-const PROCESSED_ACTION_LABELS: Record<Category, string> = {
+const PROCESSED_ACTION_LABELS: Record<string, string> = {
   trash: 'Trash Msg',
   junk_review: 'Junk Rule',
   bulk_mail: 'Bulk Rule',
   needs_review: 'Needs Review',
   keep: 'Keep Msg',
+  restore_to_inbox: 'Restored',
+  leave_in_spam: 'Left in Spam',
+}
+
+const SPAM_RESCUE_ACTION_LABELS: Record<SpamRescueAction, string> = {
+  restore_to_inbox: 'Restore to Inbox',
+  leave_in_spam: 'Leave in Spam',
 }
 
 const ACTION_SOURCE_LABELS: Record<string, string> = {
@@ -126,6 +148,7 @@ const ACTION_SOURCE_LABELS: Record<string, string> = {
   rule_auto_apply: 'Rule auto',
   high_confidence_auto_clean: 'Auto-clean',
   recovery: 'Recovery',
+  spam_rescue: 'Spam Rescue',
   legacy_unknown: 'Legacy',
 }
 
@@ -237,13 +260,15 @@ function formatConfidencePercent(confidence: number) {
   return `${percent}%`
 }
 
-function queueCategoryClassName(category: Category) {
+function queueCategoryClassName(category: string) {
   switch (category) {
     case 'bulk_mail':
       return 'bulk'
     case 'junk_review':
       return 'junk'
     case 'needs_review':
+    case 'restore_to_inbox':
+    case 'leave_in_spam':
       return 'review'
     default:
       return category
@@ -479,8 +504,11 @@ function App() {
   const [actionMap, setActionMap] = useState<ActionMap>({})
   const [stagedActions, setStagedActions] = useState<Record<number, StagedQueueAction>>({})
   const [stagedOrder, setStagedOrder] = useState<number[]>([])
+  const [stagedSpamRescueActions, setStagedSpamRescueActions] = useState<Record<string, StagedSpamRescueAction>>({})
+  const [stagedSpamRescueOrder, setStagedSpamRescueOrder] = useState<string[]>([])
   const [commitBusy, setCommitBusy] = useState(false)
   const [commitErrors, setCommitErrors] = useState<Record<number, string>>({})
+  const [spamRescueCommitErrors, setSpamRescueCommitErrors] = useState<Record<string, string>>({})
   const [showMockAccounts, setShowMockAccounts] = useState(false)
   const [showScrollTopButton, setShowScrollTopButton] = useState(false)
   const [newRulePattern, setNewRulePattern] = useState('')
@@ -500,6 +528,7 @@ function App() {
     }
     if (!options?.preserveCommitErrors) {
       setCommitErrors({})
+      setSpamRescueCommitErrors({})
     }
 
     setLoading(true)
@@ -583,7 +612,7 @@ function App() {
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: scrollTop, behavior: 'auto' })
     })
-  }, [loading, queue])
+  }, [loading, queue, spamRescueQueue])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -681,6 +710,21 @@ function App() {
     [accountMap, canUseDevelopmentHarness, showMockAccounts, spamRescueQueue],
   )
 
+  const activeVisibleSpamRescueQueue = useMemo(
+    () =>
+      visibleSpamRescueQueue
+        .map((account) => {
+          const messages = account.messages.filter((message) => !stagedSpamRescueActions[message.id])
+          return {
+            ...account,
+            count: messages.length,
+            messages,
+          }
+        })
+        .filter((account) => account.messages.length > 0),
+    [stagedSpamRescueActions, visibleSpamRescueQueue],
+  )
+
   const activeVisibleQueue = useMemo(
     () =>
       visibleQueue.map((account) => ({
@@ -733,9 +777,28 @@ function App() {
   }, [activeVisibleQueue])
 
   const visibleSpamRescueCount = useMemo(
-    () => visibleSpamRescueQueue.reduce((total, account) => total + account.messages.length, 0),
-    [visibleSpamRescueQueue],
+    () => activeVisibleSpamRescueQueue.reduce((total, account) => total + account.messages.length, 0),
+    [activeVisibleSpamRescueQueue],
   )
+
+  const stagedSpamRescueList = useMemo(
+    () =>
+      stagedSpamRescueOrder
+        .map((candidateId) => stagedSpamRescueActions[candidateId])
+        .filter((action): action is StagedSpamRescueAction => Boolean(action)),
+    [stagedSpamRescueActions, stagedSpamRescueOrder],
+  )
+
+  const stagedSpamRescueByAccount = useMemo(() => {
+    const grouped = new Map<string, StagedSpamRescueAction[]>()
+    stagedSpamRescueList.forEach((item) => {
+      grouped.set(item.accountEmail, [...(grouped.get(item.accountEmail) ?? []), item])
+    })
+    return Array.from(grouped.entries()).map(([accountEmail, items]) => ({
+      accountEmail,
+      items,
+    }))
+  }, [stagedSpamRescueList])
 
   const monitoredQueueAccounts = useMemo(
     () =>
@@ -767,6 +830,8 @@ function App() {
       items,
     }))
   }, [stagedList])
+
+  const totalStagedCount = stagedList.length + stagedSpamRescueList.length
 
   async function handleSync() {
     setBusy(true)
@@ -921,6 +986,112 @@ function App() {
       setNotice(`${committedText}${failedText}`)
     } catch (error) {
       setNotice(userFacingErrorMessage(error, 'Could not commit staged changes.'))
+    } finally {
+      setCommitBusy(false)
+      setBusy(false)
+    }
+  }
+
+  function stageSpamRescueAction(message: SpamRescueMessage, action: SpamRescueAction) {
+    commitIdempotencyKeyRef.current = null
+    setSpamRescueCommitErrors((current) => {
+      const next = { ...current }
+      delete next[message.id]
+      return next
+    })
+    setStagedSpamRescueActions((current) => ({
+      ...current,
+      [message.id]: {
+        clientActionId: current[message.id]?.clientActionId ?? buildClientActionId(),
+        candidateId: message.id,
+        accountEmail: message.account_email,
+        gmailMessageId: message.gmail_message_id,
+        sender: message.sender,
+        senderDomain: message.sender_domain,
+        subject: message.subject,
+        action,
+        actionLabel: SPAM_RESCUE_ACTION_LABELS[action],
+        expectedVersion: message.state_version,
+        stagedAt: new Date().toISOString(),
+      },
+    }))
+    setStagedSpamRescueOrder((current) =>
+      current.includes(message.id) ? current : [...current, message.id],
+    )
+    setNotice(`${SPAM_RESCUE_ACTION_LABELS[action]} staged for "${message.subject}". Commit when ready.`)
+  }
+
+  function handleUndoLastStagedSpamRescueAction() {
+    const lastCandidateId = stagedSpamRescueOrder.at(-1)
+    if (lastCandidateId === undefined) {
+      return
+    }
+    const staged = stagedSpamRescueActions[lastCandidateId]
+    commitIdempotencyKeyRef.current = null
+    setStagedSpamRescueActions((current) => {
+      const next = { ...current }
+      delete next[lastCandidateId]
+      return next
+    })
+    setStagedSpamRescueOrder((current) => current.slice(0, -1))
+    setNotice(staged ? `Restored "${staged.subject}" to Spam Rescue.` : 'Restored the last staged Spam Rescue candidate.')
+  }
+
+  function handleDiscardStagedSpamRescueActions() {
+    const count = stagedSpamRescueList.length
+    commitIdempotencyKeyRef.current = null
+    setStagedSpamRescueActions({})
+    setStagedSpamRescueOrder([])
+    setSpamRescueCommitErrors({})
+    setNotice(count === 1 ? 'Discarded 1 Spam Rescue change.' : `Discarded ${count} Spam Rescue changes.`)
+  }
+
+  async function handleCommitStagedSpamRescueActions() {
+    if (stagedSpamRescueList.length === 0 || commitBusy) {
+      return
+    }
+    const idempotencyKey = commitIdempotencyKeyRef.current ?? buildClientActionId()
+    commitIdempotencyKeyRef.current = idempotencyKey
+    setCommitBusy(true)
+    setBusy(true)
+    setNotice(
+      stagedSpamRescueList.length === 1
+        ? 'Committing 1 Spam Rescue change...'
+        : `Committing ${stagedSpamRescueList.length} Spam Rescue changes...`,
+    )
+    try {
+      const response = await commitStagedSpamRescueActions({
+        idempotency_key: idempotencyKey,
+        actions: stagedSpamRescueList.map((item) => ({
+          client_action_id: item.clientActionId,
+          account_email: item.accountEmail,
+          gmail_message_id: item.gmailMessageId,
+          action: item.action,
+          expected_version: item.expectedVersion,
+        })),
+      })
+      const failedResults = response.results.filter((result) => result.status !== 'committed')
+      const failedByCandidate = Object.fromEntries(
+        failedResults.map((result) => [result.candidate_id, result.message]),
+      )
+      setSpamRescueCommitErrors(failedByCandidate)
+      commitIdempotencyKeyRef.current = null
+      setStagedSpamRescueActions({})
+      setStagedSpamRescueOrder([])
+      await loadAll({ preserveCommitErrors: true, preserveScroll: true })
+      const committedText =
+        response.committed_count === 1
+          ? 'Committed 1 Spam Rescue change.'
+          : `Committed ${response.committed_count} Spam Rescue changes.`
+      const failedText =
+        response.failed_count === 0
+          ? ''
+          : response.failed_count === 1
+            ? ' 1 candidate needs attention.'
+            : ` ${response.failed_count} candidates need attention.`
+      setNotice(`${committedText}${failedText}`)
+    } catch (error) {
+      setNotice(userFacingErrorMessage(error, 'Could not commit Spam Rescue changes.'))
     } finally {
       setCommitBusy(false)
       setBusy(false)
@@ -1520,12 +1691,12 @@ function App() {
         <div>
           <h2>Spam Rescue</h2>
           <p className="subtle">
-            Recent unread Spam messages with rescue signals.
+            Review likely false positives from Spam, then choose whether to restore them or leave them alone.
           </p>
         </div>
         <div className="spam-rescue-summary" aria-label="Spam Rescue snapshot">
           <div className="summary-stat">
-            <strong>{visibleSpamRescueQueue.length}</strong>
+            <strong>{activeVisibleSpamRescueQueue.length}</strong>
             <span>Accounts</span>
           </div>
           <div className="summary-stat">
@@ -1535,12 +1706,78 @@ function App() {
         </div>
       </div>
 
+      {stagedSpamRescueList.length > 0 ? (
+        <div className="staged-queue-panel spam-rescue-staged-panel">
+          <div className="staged-queue-toolbar">
+            <div>
+              <strong>
+                {stagedSpamRescueList.length === 1
+                  ? '1 Spam Rescue change staged'
+                  : `${stagedSpamRescueList.length} Spam Rescue changes staged`}
+              </strong>
+              <p className="subtle">Spam Rescue will update when you commit.</p>
+            </div>
+            <div className="staged-queue-actions">
+              <button
+                type="button"
+                className="staged-queue-secondary-button"
+                onClick={handleUndoLastStagedSpamRescueAction}
+                disabled={commitBusy}
+              >
+                Undo Last
+              </button>
+              <button
+                type="button"
+                className="staged-queue-secondary-button"
+                onClick={handleDiscardStagedSpamRescueActions}
+                disabled={commitBusy}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => void handleCommitStagedSpamRescueActions()}
+                disabled={commitBusy}
+              >
+                {commitBusy ? 'Committing...' : 'Commit Changes'}
+              </button>
+            </div>
+          </div>
+          <div className="staged-queue-list">
+            {stagedSpamRescueByAccount.map((group) => (
+              <section key={group.accountEmail} className="staged-account-group">
+                <div className="staged-account-header">
+                  <strong>{group.accountEmail}</strong>
+                  <span className="count-pill">{group.items.length}</span>
+                </div>
+                <div className="staged-account-items">
+                  {group.items.map((item) => (
+                    <div key={item.candidateId} className="staged-queue-item">
+                      <span className="classification-pill classification-pill-review">
+                        {item.actionLabel}
+                      </span>
+                      <div>
+                        <strong>{item.subject}</strong>
+                        <p className="message-meta">
+                          {item.sender} | {item.senderDomain}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="empty-state">Loading Spam Rescue candidates...</div>
-      ) : visibleSpamRescueCount === 0 ? (
+      ) : visibleSpamRescueCount === 0 && stagedSpamRescueList.length === 0 ? (
         <div className="empty-state">No likely Spam false positives found.</div>
       ) : (
-        visibleSpamRescueQueue.map((account) => (
+        activeVisibleSpamRescueQueue.map((account) => (
           <section key={account.account_email} className="account-card spam-rescue-account">
             <div className="account-header">
               <div className="account-title">
@@ -1575,6 +1812,9 @@ function App() {
                         <span className="message-meta">{formatRelativeDate(message.received_at)}</span>
                         {message.has_attachments ? <span className="message-meta">Attachment</span> : null}
                       </div>
+                      {spamRescueCommitErrors[message.id] ? (
+                        <p className="queue-commit-error">{spamRescueCommitErrors[message.id]}</p>
+                      ) : null}
 
                       <div className="message-preview spam-rescue-preview">
                         <strong className="message-detail-label">Preview</strong>
@@ -1601,6 +1841,25 @@ function App() {
                             </ul>
                           </div>
                         ) : null}
+                      </div>
+
+                      <div className="spam-rescue-actions">
+                        <button
+                          type="button"
+                          className="button primary"
+                          onClick={() => stageSpamRescueAction(message, 'restore_to_inbox')}
+                          disabled={busy || commitBusy}
+                        >
+                          Restore to Inbox
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => stageSpamRescueAction(message, 'leave_in_spam')}
+                          disabled={busy || commitBusy}
+                        >
+                          Leave in Spam
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2011,7 +2270,7 @@ function App() {
                 }
               >
                 <span className={`processed-action processed-action-${message.selected_action}`}>
-                  {PROCESSED_ACTION_LABELS[message.selected_action]}
+                  {PROCESSED_ACTION_LABELS[message.selected_action] ?? formatActionSource(message.selected_action)}
                 </span>
                 <span className="processed-source" title={`Source: ${formatActionSource(message.action_source)}`}>
                   {formatActionSource(message.action_source)}
@@ -2637,7 +2896,7 @@ function App() {
               <span>Unread queued</span>
             </div>
             <div className="summary-stat">
-              <strong>{stagedList.length}</strong>
+              <strong>{totalStagedCount}</strong>
               <span>Staged</span>
             </div>
           </div>
