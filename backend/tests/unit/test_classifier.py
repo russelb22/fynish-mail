@@ -139,6 +139,17 @@ def test_spam_rescue_prior_keep_history_surfaces_candidate():
     assert "Sender previously kept" in result.reasons
 
 
+def test_spam_rescue_prior_domain_keep_history_surfaces_candidate():
+    result = classify_spam_rescue_candidate(
+        _spam_message("personal@example.com", "ps-9004"),
+        rules=[],
+        history_by_sender=Counter(),
+        history_by_domain=Counter({"example.org:keep": 1}),
+    )
+    assert result.should_surface is True
+    assert "Sender domain previously kept" in result.reasons
+
+
 def test_spam_rescue_explicit_junk_rule_suppresses_candidate():
     result = classify_spam_rescue_candidate(
         _spam_message("personal@example.com", "ps-9001"),
@@ -157,6 +168,46 @@ def test_spam_rescue_explicit_junk_rule_suppresses_candidate():
     assert result.should_surface is False
     assert result.confidence == 0.95
     assert result.matched_rule_ids == [202]
+
+
+def test_spam_rescue_disabled_keep_rule_does_not_surface_candidate():
+    result = classify_spam_rescue_candidate(
+        _spam_message("personal@example.com", "ps-9002"),
+        rules=[
+            {
+                "id": 303,
+                "enabled": False,
+                "rule_type": "domain",
+                "pattern": "winner-promo.top",
+                "action": "keep",
+            }
+        ],
+        history_by_sender=Counter(),
+        history_by_domain=Counter(),
+    )
+    assert result.should_surface is False
+    assert result.matched_rule_ids == []
+    assert "Explicit Always Keep rule matched" not in result.reasons
+
+
+def test_spam_rescue_disabled_junk_rule_does_not_suppress_candidate():
+    result = classify_spam_rescue_candidate(
+        _spam_message("personal@example.com", "ps-9001"),
+        rules=[
+            {
+                "id": 404,
+                "enabled": False,
+                "rule_type": "domain",
+                "pattern": "water.example.gov",
+                "action": "junk_review",
+            }
+        ],
+        history_by_sender=Counter(),
+        history_by_domain=Counter(),
+    )
+    assert result.should_surface is True
+    assert result.matched_rule_ids == []
+    assert any("Protected keywords" in reason for reason in result.reasons)
 
 
 def test_spam_rescue_surfaces_protected_candidate_with_moderate_risk_signal():
