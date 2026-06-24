@@ -27,6 +27,19 @@ test('review queue loads mocked accounts and compact empty category chips', asyn
   await expect(page.locator('.empty-group-chip').first()).toBeVisible()
 })
 
+test('spam rescue renders read-only mock candidates', async ({ page }) => {
+  await page.goto('/')
+  await enableMockAccounts(page)
+  await refreshQueue(page)
+
+  await page.getByRole('button', { name: 'Spam Rescue' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Spam Rescue' })).toBeVisible()
+  await expect(page.locator('.spam-rescue-row').filter({ hasText: 'Invoice receipt for utility service' })).toBeVisible()
+  await expect(page.locator('.spam-rescue-row').filter({ hasText: 'Final notice: claim your reward today' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Restore/i })).toHaveCount(0)
+})
+
 test('keyboard shortcuts stage and undo the next queue message', async ({
   page,
 }) => {

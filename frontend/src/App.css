@@ -1400,6 +1400,55 @@
   line-height: 1.35;
 }
 
+.spam-rescue-summary {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.spam-rescue-account {
+  margin-top: 16px;
+}
+
+.spam-rescue-row {
+  border-left: 5px solid rgba(126, 169, 255, 0.62);
+}
+
+.spam-source-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid rgba(63, 48, 36, 0.12);
+  border-radius: 999px;
+  padding: 0.2rem 0.62rem;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.spam-rescue-preview {
+  border: 1px solid rgba(63, 48, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 10px 12px;
+}
+
+.spam-rescue-preview p {
+  margin: 4px 0 0;
+  color: var(--ink);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.spam-rescue-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.75fr);
+  gap: 14px;
+  margin-top: 12px;
+}
+
 .queue-bootstrap-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
@@ -1934,6 +1983,10 @@
   }
 
   .queue-bootstrap-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .spam-rescue-detail-grid {
     grid-template-columns: 1fr;
   }
 

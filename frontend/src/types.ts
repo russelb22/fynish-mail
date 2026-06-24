@@ -87,6 +87,41 @@ export interface FeatureFlags {
   auto_response_drafts: boolean
   auto_response_send: boolean
   writing_style_cards: boolean
+  spam_rescue: boolean
+}
+
+export interface SpamRescueMessage {
+  id: string
+  gmail_message_id: string
+  thread_id: string
+  account_email: string
+  sender: string
+  sender_domain: string
+  reply_to: string
+  subject: string
+  received_at: string
+  snippet: string
+  body_preview: string
+  has_attachments: boolean
+  source_label: 'spam'
+  review_surface: 'spam_rescue'
+  state_version: string | null
+  confidence: number
+  rescue_reasons: string[]
+  protection_reasons: string[]
+  matched_rule_ids: number[]
+}
+
+export interface SpamRescueAccount {
+  account_email: string
+  last_sync_at: string | null
+  count: number
+  messages: SpamRescueMessage[]
+}
+
+export interface SpamRescueQueueResponse {
+  accounts: SpamRescueAccount[]
+  count: number
 }
 
 export interface DigestSenderStatus {
