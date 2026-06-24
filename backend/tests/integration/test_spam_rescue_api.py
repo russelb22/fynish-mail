@@ -157,3 +157,78 @@ def test_spam_rescue_commit_rejects_stale_state_version(api_client, seeded_db):
     result = payload["results"][0]
     assert result["status"] == "stale"
     assert result["code"] == "stale_spam_rescue_message"
+
+
+def test_spam_rescue_idempotency_replay_does_not_apply_second_payload(api_client, seeded_db):
+    queue = api_client.get("/api/spam-rescue").json()
+    restore_candidate = _candidate_by_gmail_id(queue, "ps-9001")
+    leave_candidate = _candidate_by_gmail_id(queue, "ps-9004")
+
+    first_response = api_client.post(
+        "/api/spam-rescue/staged-actions/commit",
+        json={
+            "idempotency_key": "same-key",
+            "actions": [
+                {
+                    "client_action_id": "client-idempotent-restore",
+                    "account_email": restore_candidate["account_email"],
+                    "gmail_message_id": restore_candidate["gmail_message_id"],
+                    "action": "restore_to_inbox",
+                    "expected_version": restore_candidate["state_version"],
+                }
+            ],
+        },
+    )
+
+    assert first_response.status_code == 200
+    first_payload = first_response.json()
+    assert first_payload["committed_count"] == 1
+    assert first_payload.get("idempotent_replay") is None
+
+    second_response = api_client.post(
+        "/api/spam-rescue/staged-actions/commit",
+        json={
+            "idempotency_key": "same-key",
+            "actions": [
+                {
+                    "client_action_id": "client-idempotent-leave",
+                    "account_email": leave_candidate["account_email"],
+                    "gmail_message_id": leave_candidate["gmail_message_id"],
+                    "action": "leave_in_spam",
+                    "expected_version": leave_candidate["state_version"],
+                }
+            ],
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_payload = second_response.json()
+    assert second_payload["idempotent_replay"] is True
+    assert second_payload["results"][0]["gmail_message_id"] == "ps-9001"
+    assert second_payload["results"][0]["action"] == "restore_to_inbox"
+
+    with get_connection() as conn:
+        action_rows = conn.execute(
+            """
+            SELECT gmail_message_id, selected_action
+            FROM actions_log
+            WHERE action_source = 'spam_rescue'
+            ORDER BY id
+            """
+        ).fetchall()
+
+    assert [dict(row) for row in action_rows] == [
+        {
+            "gmail_message_id": "ps-9001",
+            "selected_action": "restore_to_inbox",
+        }
+    ]
+
+    refreshed = api_client.get("/api/spam-rescue").json()
+    refreshed_ids = {
+        message["gmail_message_id"]
+        for account in refreshed["accounts"]
+        for message in account["messages"]
+    }
+    assert "ps-9001" not in refreshed_ids
+    assert "ps-9004" in refreshed_ids

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,8 @@ from app.services.review_queue import (
 )
 from app.services.runtime_user import require_explicit_user_id_in_cloud
 
+
+logger = logging.getLogger(__name__)
 
 SPAM_RESCUE_ACTIONS = {"restore_to_inbox", "leave_in_spam"}
 SPAM_RESCUE_ACTION_SOURCE = "spam_rescue"
@@ -181,11 +184,24 @@ def _load_idempotent_response(*, user_id: int, idempotency_key: str, request_has
             """,
             {"user_id": user_id, "idempotency_key": idempotency_key},
         )
-    if row is None or row["request_hash"] != request_hash:
+    if row is None:
         return None
+
+    if row["request_hash"] != request_hash:
+        logger.warning(
+            "Spam Rescue commit idempotency key reused with different payload user_id=%s idempotency_key=%s",
+            user_id,
+            idempotency_key,
+        )
+
     try:
         response = json.loads(row["response_json"])
     except (TypeError, json.JSONDecodeError):
+        logger.exception(
+            "Stored Spam Rescue idempotency response could not be decoded user_id=%s idempotency_key=%s",
+            user_id,
+            idempotency_key,
+        )
         return None
     response["idempotent_replay"] = True
     return response
