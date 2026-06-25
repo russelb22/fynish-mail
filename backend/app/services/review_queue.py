@@ -783,6 +783,7 @@ def _reconcile_gmail_account_queue(
             WHERE {identifier_column} = :account_identifier
               AND reviewed = 0
               AND recovery_pending = 0
+              AND COALESCE(queue_source, '') != 'spam_rescue'
               AND provider_message_id NOT IN ({placeholders})
             """,
             {
@@ -800,6 +801,7 @@ def _reconcile_gmail_account_queue(
             WHERE {identifier_column} = :account_identifier
               AND reviewed = 0
               AND recovery_pending = 0
+              AND COALESCE(queue_source, '') != 'spam_rescue'
             """,
             {"updated_at": now, "account_identifier": account_identifier},
         )

@@ -9,6 +9,7 @@ from app.services.gmail_readonly import (
     fetch_unread_inbox_messages as fetch_unread_inbox_messages_from_path,
     build_service_from_token_reference,
     fetch_unread_inbox_messages_from_reference,
+    fetch_unread_spam_messages_from_reference,
 )
 from app.services.gmail_token_store import GmailTokenReference
 
@@ -17,6 +18,28 @@ class MailProviderAdapter(Protocol):
     provider_name: str
 
     def list_unread_inbox_messages(self, token_reference: GmailTokenReference, max_results: int) -> list[dict]:
+        ...
+
+    def list_unread_spam_messages(
+        self,
+        token_reference: GmailTokenReference,
+        max_results: int,
+        *,
+        newer_than_days: int | None = None,
+    ) -> list[dict]:
+        ...
+
+    def modify_message_labels(
+        self,
+        *,
+        token_reference: GmailTokenReference,
+        provider_message_id: str,
+        labels_to_add: list[str],
+        labels_to_remove: list[str],
+    ) -> list[str]:
+        ...
+
+    def requires_modify_scope(self) -> str | None:
         ...
 
 
@@ -31,18 +54,18 @@ def fetch_unread_inbox_messages(
         )
     return fetch_unread_inbox_messages_from_path(token_reference, max_results=max_results)
 
-    def modify_message_labels(
-        self,
-        *,
-        token_reference: GmailTokenReference,
-        provider_message_id: str,
-        labels_to_add: list[str],
-        labels_to_remove: list[str],
-    ) -> list[str]:
-        ...
 
-    def requires_modify_scope(self) -> str | None:
-        ...
+def fetch_unread_spam_messages(
+    token_reference: GmailTokenReference,
+    max_results: int,
+    *,
+    newer_than_days: int | None = None,
+) -> list[dict]:
+    return fetch_unread_spam_messages_from_reference(
+        token_reference,
+        max_results=max_results,
+        newer_than_days=newer_than_days,
+    )
 
 
 def _label_id_map(service) -> dict[str, str]:
@@ -98,6 +121,19 @@ class GmailProviderAdapter:
 
     def list_unread_inbox_messages(self, token_reference: GmailTokenReference, max_results: int) -> list[dict]:
         return fetch_unread_inbox_messages(token_reference, max_results=max_results)
+
+    def list_unread_spam_messages(
+        self,
+        token_reference: GmailTokenReference,
+        max_results: int,
+        *,
+        newer_than_days: int | None = None,
+    ) -> list[dict]:
+        return fetch_unread_spam_messages(
+            token_reference,
+            max_results=max_results,
+            newer_than_days=newer_than_days,
+        )
 
     def modify_message_labels(
         self,

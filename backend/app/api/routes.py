@@ -103,6 +103,7 @@ from app.services.spam_rescue import (
     SpamRescueCommitAction,
     commit_spam_rescue_actions,
     get_spam_rescue_queue,
+    sync_spam_rescue_messages,
 )
 from app.services.rules import create_rule, delete_rule, list_rules, update_rule
 from app.services.staged_commit import (
@@ -321,6 +322,16 @@ def spam_rescue_queue(current_user: CurrentUser = Depends(require_current_user))
     if not config.SPAM_RESCUE_ENABLED:
         raise HTTPException(status_code=404, detail="Spam Rescue is not enabled.")
     return get_spam_rescue_queue(user_id=current_user.id)
+
+
+@router.post("/spam-rescue/sync")
+def sync_spam_rescue(current_user: CurrentUser = Depends(require_current_user)):
+    if not config.SPAM_RESCUE_ENABLED:
+        raise HTTPException(status_code=404, detail="Spam Rescue is not enabled.")
+    try:
+        return sync_spam_rescue_messages(user_id=current_user.id)
+    except GmailReadonlySyncError as error:
+        raise http_exception_for_error(error) from error
 
 
 @router.post("/spam-rescue/staged-actions/commit")
