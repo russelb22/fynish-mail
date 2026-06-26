@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from app.core import config
 from app.data.mock_messages import get_mock_spam_messages
 from app.db.runtime import execute_sql, fetch_all, fetch_one, get_connection, insert_and_return_id
 from app.services.action_logging import insert_action_log
@@ -14,9 +15,13 @@ from app.services.classifier import (
     classify_spam_rescue_candidate,
     extract_domain,
 )
+from app.services.gmail_readonly import GmailReadonlySyncError
+from app.services.gmail_token_store import GmailTokenReference
+from app.services.mail_provider_adapter import get_mail_provider_adapter
 from app.services.provider_models import MailAccountRecord
 from app.services.review_queue import (
     _enabled_mail_accounts,
+    _ensure_sync_account_provider_records,
     _history_counters,
     _load_rules,
 )
@@ -51,7 +56,22 @@ class SpamRescueCommitAction:
         return f"{self.account_email}:{self.gmail_message_id}"
 
 
-def _build_candidate_payload(account_email: str, message: dict, result) -> dict:
+@dataclass(frozen=True)
+class SpamRescueClassificationSnapshot:
+    confidence: float
+    reasons: list[str]
+    protection_reasons: list[str]
+    matched_rule_ids: list[int]
+    should_surface: bool = True
+
+
+def _build_candidate_payload(
+    account_email: str,
+    message: dict,
+    result,
+    *,
+    state_version: str | None = None,
+) -> dict:
     return {
         "id": f"{account_email}:{message['gmail_message_id']}",
         "gmail_message_id": message["gmail_message_id"],
@@ -67,7 +87,7 @@ def _build_candidate_payload(account_email: str, message: dict, result) -> dict:
         "has_attachments": bool(message["has_attachments"]),
         "source_label": "spam",
         "review_surface": "spam_rescue",
-        "state_version": message["received_at"],
+        "state_version": state_version or message["received_at"],
         "confidence": result.confidence,
         "rescue_reasons": result.reasons,
         "protection_reasons": result.protection_reasons,
@@ -109,14 +129,92 @@ def _find_account(accounts: Sequence[Mapping], account_email: str):
     return None
 
 
+def _queue_source_detail(
+    *,
+    result,
+    selected_action: str | None = None,
+) -> str:
+    payload = {
+        "review_surface": "spam_rescue",
+        "rescue_reasons": result.reasons,
+        "protection_reasons": result.protection_reasons,
+        "matched_rule_ids": result.matched_rule_ids,
+    }
+    if selected_action is not None:
+        payload["selected_action"] = selected_action
+    return json.dumps(payload, sort_keys=True)
+
+
+def _message_from_row(row) -> dict:
+    return {
+        "gmail_message_id": row["gmail_message_id"],
+        "gmail_thread_id": row["gmail_thread_id"],
+        "sender": row["sender"],
+        "reply_to": row["reply_to"],
+        "recipient_to": row["recipient_to"],
+        "recipient_cc": row["recipient_cc"],
+        "subject": row["subject"],
+        "received_at": row["received_at"],
+        "snippet": row["snippet"],
+        "body_preview": row["body_preview"],
+        "gmail_labels": json.loads(row["provider_labels_json"] or row["gmail_labels_json"] or "[]"),
+        "headers": json.loads(row["headers_json"] or "{}"),
+        "has_attachments": row["has_attachments"],
+        "spam_rescue_state_version": row["updated_at"],
+    }
+
+
+def _result_from_row(row) -> SpamRescueClassificationSnapshot:
+    detail = json.loads(row["queue_source_detail"] or "{}")
+    return SpamRescueClassificationSnapshot(
+        confidence=float(row["confidence"] or 0),
+        reasons=list(detail.get("rescue_reasons") or []),
+        protection_reasons=list(detail.get("protection_reasons") or []),
+        matched_rule_ids=list(detail.get("matched_rule_ids") or []),
+    )
+
+
+def _find_persisted_candidate(conn, *, account, gmail_message_id: str) -> tuple[dict, object] | None:
+    row = fetch_one(
+        conn,
+        """
+        SELECT *
+        FROM messages
+        WHERE mail_account_id = :mail_account_id
+          AND provider_message_id = :provider_message_id
+          AND queue_source = :queue_source
+          AND reviewed = 0
+        LIMIT 1
+        """,
+        {
+            "mail_account_id": account["mail_account_id"],
+            "provider_message_id": gmail_message_id,
+            "queue_source": SPAM_RESCUE_ACTION_SOURCE,
+        },
+    )
+    if row is None:
+        return None
+    return _message_from_row(row), _result_from_row(row)
+
+
 def _find_candidate(
     *,
+    conn,
     account,
     gmail_message_id: str,
     rules: list[dict],
     history_by_sender,
     history_by_domain,
 ) -> tuple[dict, object] | None:
+    if account["provider"] == "gmail_readonly" and account["mail_account_id"] is not None:
+        persisted = _find_persisted_candidate(
+            conn,
+            account=account,
+            gmail_message_id=gmail_message_id,
+        )
+        if persisted is not None:
+            return persisted
+
     for message in get_mock_spam_messages(account["external_account_email"]):
         if message["gmail_message_id"] != gmail_message_id:
             continue
@@ -238,7 +336,16 @@ def _store_idempotent_response(
         )
 
 
-def _upsert_spam_rescue_message(conn, *, account, message: dict, result, action: str, now: str) -> dict:
+def _upsert_spam_rescue_message(
+    conn,
+    *,
+    account,
+    message: dict,
+    result,
+    reviewed: bool,
+    now: str,
+    action: str | None = None,
+) -> dict:
     account_email = account["external_account_email"]
     mail_account_id = account["mail_account_id"]
     provider_labels_json = json.dumps(message["gmail_labels"])
@@ -278,18 +385,9 @@ def _upsert_spam_rescue_message(conn, *, account, message: dict, result, action:
         "current_category": "spam_rescue",
         "confidence": result.confidence,
         "protected": 1 if result.protection_reasons else 0,
-        "reviewed": 1,
+        "reviewed": 1 if reviewed else 0,
         "queue_source": SPAM_RESCUE_ACTION_SOURCE,
-        "queue_source_detail": json.dumps(
-            {
-                "review_surface": "spam_rescue",
-                "selected_action": action,
-                "rescue_reasons": result.reasons,
-                "protection_reasons": result.protection_reasons,
-                "matched_rule_ids": result.matched_rule_ids,
-            },
-            sort_keys=True,
-        ),
+        "queue_source_detail": _queue_source_detail(result=result, selected_action=action),
         "created_at": now,
         "updated_at": now,
     }
@@ -340,6 +438,200 @@ def _upsert_spam_rescue_message(conn, *, account, message: dict, result, action:
     return {**values, "id": message_id}
 
 
+def _stored_spam_rescue_messages(conn, account) -> list[dict]:
+    if account["mail_account_id"] is None:
+        return []
+    rows = fetch_all(
+        conn,
+        """
+        SELECT *
+        FROM messages
+        WHERE mail_account_id = :mail_account_id
+          AND queue_source = :queue_source
+          AND reviewed = 0
+        ORDER BY confidence DESC, received_at DESC
+        """,
+        {
+            "mail_account_id": account["mail_account_id"],
+            "queue_source": SPAM_RESCUE_ACTION_SOURCE,
+        },
+    )
+    messages = []
+    for row in rows:
+        message = _message_from_row(row)
+        messages.append(
+            _build_candidate_payload(
+                account["external_account_email"],
+                message,
+                _result_from_row(row),
+                state_version=row["updated_at"],
+            )
+        )
+    return messages
+
+
+def _provider_spam_messages_for_account(account) -> list[dict]:
+    reference = GmailTokenReference.from_row(account)
+    if (
+        reference.token_path is None
+        and reference.provider_connection_id is None
+        and reference.token_json() is None
+    ):
+        return []
+    adapter = get_mail_provider_adapter(account["provider"])
+    if adapter is None:
+        return []
+    return adapter.list_unread_spam_messages(
+        reference,
+        max_results=config.SPAM_RESCUE_MAX_SYNC_MESSAGES_PER_ACCOUNT,
+        newer_than_days=config.SPAM_RESCUE_LOOKBACK_DAYS,
+    )
+
+
+def _reconcile_spam_rescue_account_queue(
+    conn,
+    *,
+    mail_account_id: int,
+    current_message_ids: set[str],
+    now: str,
+) -> int:
+    if current_message_ids:
+        message_id_params = {
+            f"message_id_{index}": message_id
+            for index, message_id in enumerate(sorted(current_message_ids))
+        }
+        placeholders = ", ".join(f":{name}" for name in message_id_params)
+        result = execute_sql(
+            conn,
+            f"""
+            UPDATE messages
+            SET reviewed = 1, updated_at = :updated_at
+            WHERE mail_account_id = :mail_account_id
+              AND reviewed = 0
+              AND queue_source = :queue_source
+              AND provider_message_id NOT IN ({placeholders})
+            """,
+            {
+                "updated_at": now,
+                "mail_account_id": mail_account_id,
+                "queue_source": SPAM_RESCUE_ACTION_SOURCE,
+                **message_id_params,
+            },
+        )
+    else:
+        result = execute_sql(
+            conn,
+            """
+            UPDATE messages
+            SET reviewed = 1, updated_at = :updated_at
+            WHERE mail_account_id = :mail_account_id
+              AND reviewed = 0
+              AND queue_source = :queue_source
+            """,
+            {
+                "updated_at": now,
+                "mail_account_id": mail_account_id,
+                "queue_source": SPAM_RESCUE_ACTION_SOURCE,
+            },
+        )
+    return int(result.rowcount or 0)
+
+
+def sync_spam_rescue_messages(user_id: int | None = None) -> dict:
+    user_id = require_explicit_user_id_in_cloud(
+        user_id,
+        operation="sync_spam_rescue_messages",
+    )
+    now = _now_iso()
+    with get_connection() as conn:
+        accounts = _enabled_mail_accounts(conn, user_id=user_id)
+        rules = _load_rules(conn)
+        rules = [rule for rule in rules if rule.get("user_id") == user_id]
+        history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
+        reviewed_keys = _reviewed_candidate_keys(conn, user_id=user_id)
+
+        synced_count = 0
+        surfaced_count = 0
+        reconciled_count = 0
+        failed_accounts: list[dict] = []
+        for account in accounts:
+            if account["provider"] != "gmail_readonly":
+                continue
+            account = _ensure_sync_account_provider_records(conn, account, now)
+            try:
+                messages = _provider_spam_messages_for_account(account)
+            except GmailReadonlySyncError as error:
+                logger.warning(
+                    "Skipping Spam Rescue sync for account %s due to Gmail sync error: %s",
+                    account["external_account_email"],
+                    error,
+                )
+                failed_accounts.append(
+                    {
+                        "account_email": account["external_account_email"],
+                        "provider": account["provider"],
+                        "reason": str(error),
+                    }
+                )
+                continue
+
+            for message in messages:
+                synced_count += 1
+                key = (account["external_account_email"], message["gmail_message_id"])
+                if key in reviewed_keys:
+                    continue
+                result = classify_spam_rescue_candidate(
+                    message=message,
+                    rules=rules,
+                    history_by_sender=history_by_sender,
+                    history_by_domain=history_by_domain,
+                )
+                if not result.should_surface:
+                    continue
+                _upsert_spam_rescue_message(
+                    conn,
+                    account=account,
+                    message=message,
+                    result=result,
+                    reviewed=False,
+                    now=now,
+                )
+                surfaced_count += 1
+
+            if account["mail_account_id"] is not None:
+                current_message_ids = {
+                    message["gmail_message_id"]
+                    for message in messages
+                    if message.get("gmail_message_id")
+                }
+                reconciled_count += _reconcile_spam_rescue_account_queue(
+                    conn,
+                    mail_account_id=int(account["mail_account_id"]),
+                    current_message_ids=current_message_ids,
+                    now=now,
+                )
+                execute_sql(
+                    conn,
+                    """
+                    UPDATE mail_accounts
+                    SET last_sync_at = :last_sync_at, updated_at = :updated_at
+                    WHERE id = :mail_account_id
+                    """,
+                    {
+                        "last_sync_at": now,
+                        "updated_at": now,
+                        "mail_account_id": account["mail_account_id"],
+                    },
+                )
+
+    return {
+        "synced_messages": synced_count,
+        "surfaced_candidates": surfaced_count,
+        "reconciled_candidates": reconciled_count,
+        "failed_accounts": failed_accounts,
+    }
+
+
 def get_spam_rescue_queue(user_id: int | None = None) -> dict:
     with get_connection() as conn:
         accounts = _enabled_mail_accounts(conn, user_id=user_id)
@@ -354,24 +646,27 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
         for account in accounts:
             account_record = MailAccountRecord.from_row(account)
             messages = []
-            for message in get_mock_spam_messages(account_record.account_email):
-                if (account_record.account_email, message["gmail_message_id"]) in reviewed_keys:
-                    continue
-                result = classify_spam_rescue_candidate(
-                    message=message,
-                    rules=rules,
-                    history_by_sender=history_by_sender,
-                    history_by_domain=history_by_domain,
-                )
-                if not result.should_surface:
-                    continue
-                messages.append(
-                    _build_candidate_payload(
-                        account_record.account_email,
-                        message,
-                        result,
+            if account["provider"] == "gmail_readonly":
+                messages.extend(_stored_spam_rescue_messages(conn, account))
+            else:
+                for message in get_mock_spam_messages(account_record.account_email):
+                    if (account_record.account_email, message["gmail_message_id"]) in reviewed_keys:
+                        continue
+                    result = classify_spam_rescue_candidate(
+                        message=message,
+                        rules=rules,
+                        history_by_sender=history_by_sender,
+                        history_by_domain=history_by_domain,
                     )
-                )
+                    if not result.should_surface:
+                        continue
+                    messages.append(
+                        _build_candidate_payload(
+                            account_record.account_email,
+                            message,
+                            result,
+                        )
+                    )
 
             messages.sort(
                 key=lambda item: (item["confidence"], item["received_at"]),
@@ -467,6 +762,7 @@ def commit_spam_rescue_actions(
                 continue
 
             candidate = _find_candidate(
+                conn=conn,
                 account=account,
                 gmail_message_id=item.gmail_message_id,
                 rules=rules,
@@ -485,7 +781,7 @@ def commit_spam_rescue_actions(
                 continue
 
             message, result = candidate
-            current_version = message["received_at"]
+            current_version = message.get("spam_rescue_state_version") or message["received_at"]
             if not item.expected_version:
                 results.append(
                     _candidate_result(
@@ -514,8 +810,9 @@ def commit_spam_rescue_actions(
                 account=account,
                 message=message,
                 result=result,
-                action=item.action,
+                reviewed=True,
                 now=now,
+                action=item.action,
             )
             insert_action_log(
                 conn,

@@ -222,6 +222,15 @@ export function syncUnread() {
   }>('/sync/unread', { method: 'POST' })
 }
 
+export function syncSpamRescue() {
+  return request<{
+    synced_messages: number
+    surfaced_candidates: number
+    reconciled_candidates: number
+    failed_accounts?: Array<{ account_email: string; provider: string; reason: string }>
+  }>('/spam-rescue/sync', { method: 'POST' })
+}
+
 export function fetchReviewQueue() {
   return request<ReviewQueueResponse>('/review-queue')
 }

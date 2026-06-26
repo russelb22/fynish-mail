@@ -35,6 +35,7 @@ import {
   startDigestSenderConnect,
   startHostedGmailConnect,
   updateAiDigestAttentionNote,
+  syncSpamRescue,
   syncUnread,
   updateNotificationSettings,
   updateWritingStyleCard,
@@ -835,11 +836,19 @@ function App() {
 
   async function handleSync() {
     setBusy(true)
-    setNotice('Refreshing unread Inbox messages from connected Gmail and mock accounts...')
+    setNotice('Refreshing unread Inbox messages and Spam Rescue candidates...')
     try {
       const result = await syncUnread()
+      const spamRescueResult = featureFlags.spam_rescue ? await syncSpamRescue() : null
       await loadAll()
-      setNotice(formatSyncResultNotice(result))
+      const syncNotice = formatSyncResultNotice(result)
+      if (spamRescueResult) {
+        setNotice(
+          `${syncNotice} Spam Rescue checked ${spamRescueResult.synced_messages} Spam messages and surfaced ${spamRescueResult.surfaced_candidates}.`,
+        )
+      } else {
+        setNotice(syncNotice)
+      }
     } catch (error) {
       setNotice(userFacingErrorMessage(error, 'Sync failed.'))
     } finally {

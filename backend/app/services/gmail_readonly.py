@@ -215,6 +215,23 @@ def list_unread_inbox_message_ids(service, max_results: int) -> list[dict[str, s
     return response.get("messages", [])
 
 
+def list_unread_spam_message_ids(
+    service,
+    max_results: int,
+    *,
+    newer_than_days: int | None = None,
+) -> list[dict[str, str]]:
+    list_args: dict[str, Any] = {
+        "userId": "me",
+        "labelIds": ["SPAM", "UNREAD"],
+        "maxResults": max_results,
+    }
+    if newer_than_days is not None and newer_than_days > 0:
+        list_args["q"] = f"newer_than:{newer_than_days}d"
+    response = service.users().messages().list(**list_args).execute()
+    return response.get("messages", [])
+
+
 def fetch_message(service, message_id: str) -> dict[str, Any]:
     return (
         service.users()
@@ -356,6 +373,28 @@ def fetch_unread_inbox_messages_from_reference(
     try:
         service = build_service_from_token_reference(reference)
         message_refs = list_unread_inbox_message_ids(service, max_results=max_results)
+        messages = []
+        for message_ref in message_refs:
+            raw = fetch_message(service, message_ref["id"])
+            messages.append(transform_gmail_message(raw))
+        return messages
+    except HttpError as error:
+        raise GmailReadonlySyncError(f"Gmail read-only sync failed: {error}") from error
+
+
+def fetch_unread_spam_messages_from_reference(
+    reference: GmailTokenReference,
+    max_results: int,
+    *,
+    newer_than_days: int | None = None,
+) -> list[dict[str, Any]]:
+    try:
+        service = build_service_from_token_reference(reference)
+        message_refs = list_unread_spam_message_ids(
+            service,
+            max_results=max_results,
+            newer_than_days=newer_than_days,
+        )
         messages = []
         for message_ref in message_refs:
             raw = fetch_message(service, message_ref["id"])
