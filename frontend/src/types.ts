@@ -318,6 +318,15 @@ export interface AiDigestAttentionNote {
   updated_at: string
 }
 
+export interface SpamRescueProtectedKeyword {
+  id: number
+  user_id: number
+  keyword: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface DigestProcessedMessage {
   id: number
   processed_at: string

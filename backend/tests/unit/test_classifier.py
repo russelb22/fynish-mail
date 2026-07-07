@@ -86,6 +86,25 @@ def test_spam_rescue_surfaces_protected_invoice_candidate():
     assert any("Protected keywords" in reason for reason in result.reasons)
 
 
+def test_spam_rescue_uses_custom_protected_keywords():
+    result = classify_spam_rescue_candidate(
+        {
+            "sender": "Planning Office <permits@example.gov>",
+            "reply_to": "permits@example.gov",
+            "subject": "Zoning permit update",
+            "body_preview": "Your zoning permit hearing has been scheduled.",
+            "headers": {},
+            "has_attachments": 0,
+        },
+        rules=[],
+        history_by_sender=Counter(),
+        history_by_domain=Counter(),
+        protected_keywords={"zoning permit"},
+    )
+    assert result.should_surface is True
+    assert result.protection_reasons == ["Protected keywords detected: zoning permit"]
+
+
 def test_spam_rescue_suppresses_obvious_prize_spam():
     result = classify_spam_rescue_candidate(
         _spam_message("personal@example.com", "ps-9002"),

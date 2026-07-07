@@ -140,7 +140,19 @@ def test_ensure_database_postgres_mode_checks_connectivity_and_additive_schema(m
     fake_result = Mock()
     fake_connection = Mock()
     fake_connection.execute.return_value = fake_result
-    fake_connection.exec_driver_sql.side_effect = [None, None, None, None, None, None, [], None, None]
+    fake_connection.exec_driver_sql.side_effect = [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        [],
+        None,
+        None,
+    ]
     fake_begin_ctx = Mock()
     fake_begin_ctx.__enter__ = Mock(return_value=fake_connection)
     fake_begin_ctx.__exit__ = Mock(return_value=None)
@@ -154,4 +166,4 @@ def test_ensure_database_postgres_mode_checks_connectivity_and_additive_schema(m
 
     fake_engine.begin.assert_called_once()
     fake_connection.execute.assert_called_once()
-    assert fake_connection.exec_driver_sql.call_count == 9
+    assert fake_connection.exec_driver_sql.call_count == 11

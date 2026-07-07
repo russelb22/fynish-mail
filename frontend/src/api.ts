@@ -16,6 +16,7 @@ import type {
   ReminderSummary,
   ReviewQueueResponse,
   Rule,
+  SpamRescueProtectedKeyword,
   SpamRescueQueueResponse,
   StagedQueueCommitAction,
   StagedQueueCommitResponse,
@@ -314,6 +315,36 @@ export function updateAiDigestAttentionNote(
 
 export function deleteAiDigestAttentionNote(noteId: number) {
   return request<{ deleted: boolean }>(`/settings/ai-digest-attention-notes/${noteId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function fetchSpamRescueProtectedKeywords() {
+  return request<{ keywords: SpamRescueProtectedKeyword[] }>('/settings/spam-rescue-protected-keywords')
+}
+
+export function createSpamRescueProtectedKeyword(payload: { keyword: string; enabled?: boolean }) {
+  return request<{ keyword: SpamRescueProtectedKeyword }>('/settings/spam-rescue-protected-keywords', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateSpamRescueProtectedKeyword(
+  keywordId: number,
+  payload: Partial<Pick<SpamRescueProtectedKeyword, 'keyword' | 'enabled'>>,
+) {
+  return request<{ keyword: SpamRescueProtectedKeyword }>(
+    `/settings/spam-rescue-protected-keywords/${keywordId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function deleteSpamRescueProtectedKeyword(keywordId: number) {
+  return request<{ deleted: boolean }>(`/settings/spam-rescue-protected-keywords/${keywordId}`, {
     method: 'DELETE',
   })
 }

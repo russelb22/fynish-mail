@@ -186,3 +186,13 @@ class AIDigestAttentionNoteUpdateRequest(BaseModel):
     label: str | None = None
     note: str | None = None
     enabled: bool | None = None
+
+
+class SpamRescueProtectedKeywordCreateRequest(BaseModel):
+    keyword: str
+    enabled: bool = True
+
+
+class SpamRescueProtectedKeywordUpdateRequest(BaseModel):
+    keyword: str | None = None
+    enabled: bool | None = None

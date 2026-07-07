@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 
-PROTECTED_KEYWORDS = {
+DEFAULT_PROTECTED_KEYWORDS = {
     "account recovery",
     "bank",
     "benefits",
@@ -113,6 +113,10 @@ def _contains_any(text: str, needles: set[str]) -> list[str]:
     return sorted(found)
 
 
+def _protected_keywords(keywords: set[str] | None = None) -> set[str]:
+    return keywords if keywords is not None else DEFAULT_PROTECTED_KEYWORDS
+
+
 def _matching_rules(
     *,
     rules: list[dict],
@@ -145,6 +149,7 @@ def classify_message(
     rules: list[dict],
     history_by_sender: Counter,
     history_by_domain: Counter,
+    protected_keywords: set[str] | None = None,
 ) -> ClassificationResult:
     sender_email = extract_email(message.get("sender"))
     sender_domain = extract_domain(message.get("sender"))
@@ -183,7 +188,7 @@ def classify_message(
             matched_rule_ids=[rule["id"] for rule in keep_rules],
         )
 
-    protected_hits = _contains_any(combined, PROTECTED_KEYWORDS)
+    protected_hits = _contains_any(combined, _protected_keywords(protected_keywords))
     if protected_hits:
         protection_reasons.append(
             f"Protected keywords detected: {', '.join(protected_hits[:3])}"
@@ -309,6 +314,7 @@ def classify_spam_rescue_candidate(
     rules: list[dict],
     history_by_sender: Counter,
     history_by_domain: Counter,
+    protected_keywords: set[str] | None = None,
 ) -> SpamRescueResult:
     sender_email = extract_email(message.get("sender"))
     sender_domain = extract_domain(message.get("sender"))
@@ -352,7 +358,7 @@ def classify_spam_rescue_candidate(
         reasons.append("Explicit Always Keep rule matched")
         rescue_score += 0.7
 
-    protected_hits = _contains_any(combined, PROTECTED_KEYWORDS)
+    protected_hits = _contains_any(combined, _protected_keywords(protected_keywords))
     if protected_hits:
         protection_reasons.append(
             f"Protected keywords detected: {', '.join(protected_hits[:3])}"

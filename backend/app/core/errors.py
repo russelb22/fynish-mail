@@ -17,6 +17,7 @@ from app.services.gmail_web_oauth import (
 from app.services.notification_settings import NotificationSettingsValidationError
 from app.services.review_queue import UnsafeMessageActionError
 from app.services.rules import RuleAccountUnavailableError, RuleSourceMessageUnavailableError
+from app.services.spam_rescue_keywords import SpamRescueKeywordValidationError
 from app.services.writing_style_cards import WritingStyleCardSamplingError
 
 GMAIL_RECONNECT_REQUIRED = "gmail_reconnect_required"
@@ -30,6 +31,7 @@ UNSAFE_MESSAGE_ACTION = "unsafe_message_action"
 GMAIL_OAUTH_UNSUPPORTED_MODE = "gmail_oauth_unsupported_mode"
 NOTIFICATION_SETTINGS_VALIDATION_FAILED = "notification_settings_validation_failed"
 DIGEST_USER_NOT_FOUND = "digest_user_not_found"
+SPAM_RESCUE_KEYWORD_VALIDATION_FAILED = "spam_rescue_keyword_validation_failed"
 
 
 def _detail_with_code(message: str, code: str) -> dict[str, str]:
@@ -61,6 +63,8 @@ def error_code_for_error(error: Exception) -> str | None:
         return NOTIFICATION_SETTINGS_VALIDATION_FAILED
     if isinstance(error, DigestUserNotFoundError):
         return DIGEST_USER_NOT_FOUND
+    if isinstance(error, SpamRescueKeywordValidationError):
+        return SPAM_RESCUE_KEYWORD_VALIDATION_FAILED
     if isinstance(error, RuleAccountUnavailableError):
         return RULE_ACCOUNT_UNAVAILABLE
     if isinstance(error, RuleSourceMessageUnavailableError):
@@ -89,6 +93,7 @@ def http_exception_for_error(
             DigestSenderValidationError,
             NotificationSettingsValidationError,
             DigestUserNotFoundError,
+            SpamRescueKeywordValidationError,
             RuleAccountUnavailableError,
             RuleSourceMessageUnavailableError,
             UnsafeMessageActionError,

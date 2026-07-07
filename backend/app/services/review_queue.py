@@ -31,6 +31,7 @@ from app.services.ownership import fetch_owned_message
 from app.services.provider_models import MailAccountRecord, ProviderMessageRecord
 from app.services.rules import record_rule_matches
 from app.services.runtime_user import require_explicit_user_id_in_cloud
+from app.services.spam_rescue_keywords import get_enabled_spam_rescue_protected_keywords
 
 
 CATEGORY_META = [
@@ -434,6 +435,7 @@ def _upsert_classified_message(
     rules: list[dict],
     history_by_sender: Counter,
     history_by_domain: Counter,
+    protected_keywords: set[str],
     *,
     reset_reviewed: bool = False,
 ) -> tuple[int, ClassificationResult, bool]:
@@ -443,6 +445,7 @@ def _upsert_classified_message(
         rules=rules,
         history_by_sender=history_by_sender,
         history_by_domain=history_by_domain,
+        protected_keywords=protected_keywords,
     )
     account_email = account["external_account_email"]
     mail_account_id = account["mail_account_id"]
@@ -905,6 +908,7 @@ def sync_unread_messages(
         if user_id is not None:
             rules = [rule for rule in rules if rule.get("user_id") == user_id]
         history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
+        protected_keywords = get_enabled_spam_rescue_protected_keywords(user_id=user_id)
 
         synced_count = 0
         reconciled_count = 0
@@ -945,6 +949,7 @@ def sync_unread_messages(
                     rules=rules,
                     history_by_sender=history_by_sender,
                     history_by_domain=history_by_domain,
+                    protected_keywords=protected_keywords,
                     reset_reviewed=account["provider"] == "gmail_readonly",
                 )
                 if _should_auto_apply_rule_match(classification, preserve_reviewed):
@@ -1017,6 +1022,7 @@ def reclassify_pending_messages(user_id: int | None = None) -> dict:
         if user_id is not None:
             rules = [rule for rule in rules if rule.get("user_id") == user_id]
         history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
+        protected_keywords = get_enabled_spam_rescue_protected_keywords(user_id=user_id)
         if user_id is None:
             rows = fetch_all(
                 conn,
@@ -1057,6 +1063,7 @@ def reclassify_pending_messages(user_id: int | None = None) -> dict:
                 rules=rules,
                 history_by_sender=history_by_sender,
                 history_by_domain=history_by_domain,
+                protected_keywords=protected_keywords,
             )
             record_rule_matches(classification.matched_rule_ids, conn=conn)
             execute_sql(

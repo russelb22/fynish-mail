@@ -26,6 +26,7 @@ from app.services.review_queue import (
     _load_rules,
 )
 from app.services.runtime_user import require_explicit_user_id_in_cloud
+from app.services.spam_rescue_keywords import get_enabled_spam_rescue_protected_keywords
 
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,7 @@ def _find_candidate(
     rules: list[dict],
     history_by_sender,
     history_by_domain,
+    protected_keywords: set[str],
 ) -> tuple[dict, object] | None:
     if account["provider"] == "gmail_readonly" and account["mail_account_id"] is not None:
         persisted = _find_persisted_candidate(
@@ -226,6 +228,7 @@ def _find_candidate(
             rules=rules,
             history_by_sender=history_by_sender,
             history_by_domain=history_by_domain,
+            protected_keywords=protected_keywords,
         )
         if not result.should_surface:
             return None
@@ -671,6 +674,7 @@ def sync_spam_rescue_messages(user_id: int | None = None) -> dict:
         rules = [rule for rule in rules if rule.get("user_id") == user_id]
         history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
         reviewed_keys = _reviewed_candidate_keys(conn, user_id=user_id)
+        protected_keywords = get_enabled_spam_rescue_protected_keywords(user_id=user_id)
 
         synced_count = 0
         surfaced_count = 0
@@ -707,6 +711,7 @@ def sync_spam_rescue_messages(user_id: int | None = None) -> dict:
                     rules=rules,
                     history_by_sender=history_by_sender,
                     history_by_domain=history_by_domain,
+                    protected_keywords=protected_keywords,
                 )
                 if not result.should_surface:
                     continue
@@ -762,6 +767,7 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
             rules = [rule for rule in rules if rule.get("user_id") == user_id]
         history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
         reviewed_keys = _reviewed_candidate_keys(conn, user_id=user_id)
+        protected_keywords = get_enabled_spam_rescue_protected_keywords(user_id=user_id)
 
         result_accounts = []
         total_count = 0
@@ -779,6 +785,7 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
                         rules=rules,
                         history_by_sender=history_by_sender,
                         history_by_domain=history_by_domain,
+                        protected_keywords=protected_keywords,
                     )
                     if not result.should_surface:
                         continue
@@ -834,6 +841,7 @@ def commit_spam_rescue_actions(
         rules = [rule for rule in rules if rule.get("user_id") == user_id]
         history_by_sender, history_by_domain = _history_counters(conn, user_id=user_id)
         reviewed_keys = _reviewed_candidate_keys(conn, user_id=user_id)
+        protected_keywords = get_enabled_spam_rescue_protected_keywords(user_id=user_id)
 
         for item in actions:
             key = (item.account_email, item.gmail_message_id)
@@ -890,6 +898,7 @@ def commit_spam_rescue_actions(
                 rules=rules,
                 history_by_sender=history_by_sender,
                 history_by_domain=history_by_domain,
+                protected_keywords=protected_keywords,
             )
             if candidate is None:
                 results.append(

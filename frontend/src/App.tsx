@@ -10,7 +10,9 @@ import {
   connectMockAccount,
   createWritingStyleCard,
   createAiDigestAttentionNote,
+  createSpamRescueProtectedKeyword,
   deleteAiDigestAttentionNote,
+  deleteSpamRescueProtectedKeyword,
   createRule,
   deleteRule,
   disableWritingStyleCard,
@@ -25,6 +27,7 @@ import {
   fetchProcessedMessages,
   fetchReviewQueue,
   fetchSpamRescueQueue,
+  fetchSpamRescueProtectedKeywords,
   fetchWritingStyleCards,
   recoverProcessedMessage,
   fetchRules,
@@ -35,6 +38,7 @@ import {
   startDigestSenderConnect,
   startHostedGmailConnect,
   updateAiDigestAttentionNote,
+  updateSpamRescueProtectedKeyword,
   syncSpamRescue,
   syncUnread,
   updateNotificationSettings,
@@ -58,6 +62,7 @@ import type {
   SpamRescueAction,
   SpamRescueAccount,
   SpamRescueMessage,
+  SpamRescueProtectedKeyword,
   WritingStyleCard,
 } from './types'
 
@@ -69,6 +74,9 @@ type AttentionNoteDraft = {
   domain: string
   label: string
   note: string
+}
+type ProtectedKeywordDraft = {
+  keyword: string
 }
 type StagedQueueAction = {
   clientActionId: string
@@ -435,6 +443,15 @@ function attentionNoteDraftsFromNotes(notes: AiDigestAttentionNote[]) {
   }, {})
 }
 
+function protectedKeywordDraftsFromKeywords(keywords: SpamRescueProtectedKeyword[]) {
+  return keywords.reduce<Record<number, ProtectedKeywordDraft>>((drafts, keyword) => {
+    drafts[keyword.id] = {
+      keyword: keyword.keyword,
+    }
+    return drafts
+  }, {})
+}
+
 function parseInitialUiState(): { view: ViewName | null; notice: string | null } {
   if (typeof window === 'undefined') {
     return { view: null as ViewName | null, notice: null as string | null }
@@ -492,11 +509,14 @@ function App() {
   const [digestSenderStatus, setDigestSenderStatus] = useState<DigestSenderStatus | null>(null)
   const [aiDigestAttentionNotes, setAiDigestAttentionNotes] = useState<AiDigestAttentionNote[]>([])
   const [attentionNoteDrafts, setAttentionNoteDrafts] = useState<Record<number, AttentionNoteDraft>>({})
+  const [spamRescueProtectedKeywords, setSpamRescueProtectedKeywords] = useState<SpamRescueProtectedKeyword[]>([])
+  const [protectedKeywordDrafts, setProtectedKeywordDrafts] = useState<Record<number, ProtectedKeywordDraft>>({})
   const [writingStyleCards, setWritingStyleCards] = useState<WritingStyleCard[]>([])
   const [writingStyleDrafts, setWritingStyleDrafts] = useState<Record<number, string>>({})
   const [newAttentionDomain, setNewAttentionDomain] = useState('')
   const [newAttentionLabel, setNewAttentionLabel] = useState('')
   const [newAttentionNote, setNewAttentionNote] = useState('')
+  const [newProtectedKeyword, setNewProtectedKeyword] = useState('')
   const [settingsErrors, setSettingsErrors] = useState<SettingsFieldErrors>({})
   const [expandedProcessedId, setExpandedProcessedId] = useState<number | null>(null)
   const [expandedQueuePreviewId, setExpandedQueuePreviewId] = useState<number | null>(null)
@@ -554,6 +574,7 @@ function App() {
         settingsData,
         digestSenderData,
         attentionNotesData,
+        protectedKeywordsData,
         featureData,
       ] = await Promise.all([
         fetchProcessedMessages(),
@@ -564,6 +585,7 @@ function App() {
         fetchNotificationSettings(),
         fetchDigestSenderStatus(),
         fetchAiDigestAttentionNotes(),
+        fetchSpamRescueProtectedKeywords(),
         fetchFeatureFlags(),
       ])
       const styleCardsData = featureData.features.writing_style_cards
@@ -588,6 +610,8 @@ function App() {
       setDigestSenderStatus(digestSenderData)
       setAiDigestAttentionNotes(attentionNotesData.notes)
       setAttentionNoteDrafts(attentionNoteDraftsFromNotes(attentionNotesData.notes))
+      setSpamRescueProtectedKeywords(protectedKeywordsData.keywords)
+      setProtectedKeywordDrafts(protectedKeywordDraftsFromKeywords(protectedKeywordsData.keywords))
       setWritingStyleCards(styleCardsData.cards)
       setWritingStyleDrafts(
         Object.fromEntries(
@@ -1342,6 +1366,12 @@ function App() {
     setAttentionNoteDrafts(attentionNoteDraftsFromNotes(response.notes))
   }
 
+  async function refreshProtectedKeywords() {
+    const response = await fetchSpamRescueProtectedKeywords()
+    setSpamRescueProtectedKeywords(response.keywords)
+    setProtectedKeywordDrafts(protectedKeywordDraftsFromKeywords(response.keywords))
+  }
+
   async function refreshWritingStyleCards() {
     if (!featureFlags.writing_style_cards) {
       setWritingStyleCards([])
@@ -1495,6 +1525,84 @@ function App() {
       setNotice(`AI digest note deleted for ${note.domain}.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `Unable to delete note for ${note.domain}.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function updateProtectedKeywordDraft(keywordId: number, changes: Partial<ProtectedKeywordDraft>) {
+    setProtectedKeywordDrafts((current) => ({
+      ...current,
+      [keywordId]: {
+        ...(current[keywordId] ?? { keyword: '' }),
+        ...changes,
+      },
+    }))
+  }
+
+  async function handleCreateSpamRescueProtectedKeyword() {
+    if (!newProtectedKeyword.trim()) {
+      setNotice('Enter a protected keyword first.')
+      return
+    }
+    setBusy(true)
+    setNotice(`Adding protected keyword ${newProtectedKeyword.trim()}...`)
+    try {
+      await createSpamRescueProtectedKeyword({
+        keyword: newProtectedKeyword,
+        enabled: true,
+      })
+      setNewProtectedKeyword('')
+      await refreshProtectedKeywords()
+      setNotice('Spam Rescue protected keyword added.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to add protected keyword.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSaveSpamRescueProtectedKeyword(keyword: SpamRescueProtectedKeyword) {
+    const draft = protectedKeywordDrafts[keyword.id]
+    if (!draft) {
+      return
+    }
+    setBusy(true)
+    setNotice(`Saving protected keyword ${keyword.keyword}...`)
+    try {
+      await updateSpamRescueProtectedKeyword(keyword.id, draft)
+      await refreshProtectedKeywords()
+      setNotice(`Protected keyword saved as ${draft.keyword || keyword.keyword}.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : `Unable to save keyword ${keyword.keyword}.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleToggleSpamRescueProtectedKeyword(keyword: SpamRescueProtectedKeyword) {
+    setBusy(true)
+    setNotice(`${keyword.enabled ? 'Disabling' : 'Enabling'} protected keyword ${keyword.keyword}...`)
+    try {
+      await updateSpamRescueProtectedKeyword(keyword.id, { enabled: !keyword.enabled })
+      await refreshProtectedKeywords()
+      setNotice(`Protected keyword ${keyword.enabled ? 'disabled' : 'enabled'}: ${keyword.keyword}.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : `Unable to update keyword ${keyword.keyword}.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteSpamRescueProtectedKeyword(keyword: SpamRescueProtectedKeyword) {
+    setBusy(true)
+    setNotice(`Deleting protected keyword ${keyword.keyword}...`)
+    try {
+      await deleteSpamRescueProtectedKeyword(keyword.id)
+      await refreshProtectedKeywords()
+      setNotice(`Protected keyword deleted: ${keyword.keyword}.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : `Unable to delete keyword ${keyword.keyword}.`)
     } finally {
       setBusy(false)
     }
@@ -2743,6 +2851,75 @@ function App() {
             </div>
           </article>
         ) : null}
+        <article className="setting-card protected-keywords-card">
+          <strong>Spam Rescue protected keywords</strong>
+          <p className="subtle">
+            These terms help Spam Rescue surface messages from Spam for review. They never restore mail automatically.
+          </p>
+          <div className="inline-form protected-keyword-create">
+            <input
+              className="text-input"
+              type="text"
+              value={newProtectedKeyword}
+              placeholder="invoice, payroll, account recovery"
+              onChange={(event) => setNewProtectedKeyword(event.target.value)}
+            />
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => void handleCreateSpamRescueProtectedKeyword()}
+              disabled={busy || !newProtectedKeyword.trim()}
+            >
+              Add Keyword
+            </button>
+          </div>
+          <div className="protected-keyword-list">
+            {spamRescueProtectedKeywords.map((keyword) => {
+              const draft = protectedKeywordDrafts[keyword.id] ?? { keyword: keyword.keyword }
+              const hasUnsavedChanges = draft.keyword !== keyword.keyword
+              return (
+                <div className="protected-keyword-row" key={keyword.id}>
+                  <input
+                    className="text-input"
+                    type="text"
+                    value={draft.keyword}
+                    onChange={(event) => updateProtectedKeywordDraft(keyword.id, { keyword: event.target.value })}
+                  />
+                  <span className={`status-pill ${keyword.enabled ? 'enabled' : 'disabled'}`}>
+                    {keyword.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                  {hasUnsavedChanges ? <span className="count-pill">Unsaved</span> : null}
+                  <div className="card-actions">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void handleSaveSpamRescueProtectedKeyword(keyword)}
+                      disabled={busy || !hasUnsavedChanges}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void handleToggleSpamRescueProtectedKeyword(keyword)}
+                      disabled={busy}
+                    >
+                      {keyword.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button
+                      className="button ghost"
+                      type="button"
+                      onClick={() => void handleDeleteSpamRescueProtectedKeyword(keyword)}
+                      disabled={busy}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </article>
         <article className="setting-card attention-notes-card">
           <strong>AI digest attention notes</strong>
           <p className="subtle">

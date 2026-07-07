@@ -108,6 +108,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_digest_attention_notes_user_domain_lowe
 ON ai_digest_domain_attention_notes (user_id, lower(domain))
 """
 
+SPAM_RESCUE_PROTECTED_KEYWORDS_SQLITE_DDL = """
+CREATE TABLE IF NOT EXISTS spam_rescue_protected_keywords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    keyword TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, keyword),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+)
+"""
+
+SPAM_RESCUE_PROTECTED_KEYWORDS_POSTGRES_DDL = """
+CREATE TABLE IF NOT EXISTS spam_rescue_protected_keywords (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    keyword TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+SPAM_RESCUE_PROTECTED_KEYWORDS_POSTGRES_INDEX_DDL = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_spam_rescue_keywords_user_keyword_lower
+ON spam_rescue_protected_keywords (user_id, lower(keyword))
+"""
+
 WRITING_STYLE_CARDS_SQLITE_DDL = """
 CREATE TABLE IF NOT EXISTS writing_style_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,6 +292,8 @@ def ensure_database() -> None:
             conn.exec_driver_sql(STAGED_COMMIT_REQUESTS_POSTGRES_DDL)
             conn.exec_driver_sql(AI_DIGEST_ATTENTION_NOTES_POSTGRES_DDL)
             conn.exec_driver_sql(AI_DIGEST_ATTENTION_NOTES_POSTGRES_INDEX_DDL)
+            conn.exec_driver_sql(SPAM_RESCUE_PROTECTED_KEYWORDS_POSTGRES_DDL)
+            conn.exec_driver_sql(SPAM_RESCUE_PROTECTED_KEYWORDS_POSTGRES_INDEX_DDL)
             conn.exec_driver_sql(WRITING_STYLE_CARDS_POSTGRES_DDL)
             conn.exec_driver_sql(WRITING_STYLE_CARDS_POSTGRES_INDEX_DDL)
             conn.exec_driver_sql(AUTO_RESPONSE_SENDS_POSTGRES_DDL)
@@ -275,6 +306,7 @@ def ensure_database() -> None:
         conn.executescript(schema_path.read_text())
         conn.execute(STAGED_COMMIT_REQUESTS_SQLITE_DDL)
         conn.execute(AI_DIGEST_ATTENTION_NOTES_SQLITE_DDL)
+        conn.execute(SPAM_RESCUE_PROTECTED_KEYWORDS_SQLITE_DDL)
         conn.execute(WRITING_STYLE_CARDS_SQLITE_DDL)
         conn.execute(AUTO_RESPONSE_SENDS_SQLITE_DDL)
         _ensure_additive_columns(conn)

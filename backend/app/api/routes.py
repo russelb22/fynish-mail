@@ -17,6 +17,8 @@ from app.schemas.api import (
     RuleCreateRequest,
     RuleUpdateRequest,
     SpamRescueActionsCommitRequest,
+    SpamRescueProtectedKeywordCreateRequest,
+    SpamRescueProtectedKeywordUpdateRequest,
     StagedActionsCommitRequest,
     WritingStyleCardCreateRequest,
     WritingStyleCardUpdateRequest,
@@ -33,6 +35,12 @@ from app.services.ai_digest_attention_notes import (
     delete_ai_digest_attention_note,
     list_ai_digest_attention_notes,
     update_ai_digest_attention_note,
+)
+from app.services.spam_rescue_keywords import (
+    create_spam_rescue_protected_keyword,
+    delete_spam_rescue_protected_keyword,
+    list_spam_rescue_protected_keywords,
+    update_spam_rescue_protected_keyword,
 )
 from app.services.auto_response_draft import (
     AutoResponseDraftError,
@@ -487,6 +495,56 @@ def delete_ai_digest_attention_note_route(
     deleted = delete_ai_digest_attention_note(note_id, user_id=current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Attention note not found")
+    return {"deleted": True}
+
+
+@router.get("/settings/spam-rescue-protected-keywords")
+def spam_rescue_protected_keywords(current_user: CurrentUser = Depends(require_current_user)):
+    return {"keywords": list_spam_rescue_protected_keywords(user_id=current_user.id)}
+
+
+@router.post("/settings/spam-rescue-protected-keywords")
+def create_spam_rescue_protected_keyword_route(
+    payload: SpamRescueProtectedKeywordCreateRequest,
+    current_user: CurrentUser = Depends(require_current_user),
+):
+    try:
+        keyword = create_spam_rescue_protected_keyword(
+            payload.model_dump(),
+            user_id=current_user.id,
+        )
+    except ValueError as error:
+        raise http_exception_for_error(error) from error
+    return {"keyword": keyword}
+
+
+@router.patch("/settings/spam-rescue-protected-keywords/{keyword_id}")
+def update_spam_rescue_protected_keyword_route(
+    keyword_id: int,
+    payload: SpamRescueProtectedKeywordUpdateRequest,
+    current_user: CurrentUser = Depends(require_current_user),
+):
+    try:
+        keyword = update_spam_rescue_protected_keyword(
+            keyword_id,
+            payload.model_dump(exclude_unset=True),
+            user_id=current_user.id,
+        )
+    except ValueError as error:
+        raise http_exception_for_error(error) from error
+    if keyword is None:
+        raise HTTPException(status_code=404, detail="Protected keyword not found")
+    return {"keyword": keyword}
+
+
+@router.delete("/settings/spam-rescue-protected-keywords/{keyword_id}")
+def delete_spam_rescue_protected_keyword_route(
+    keyword_id: int,
+    current_user: CurrentUser = Depends(require_current_user),
+):
+    deleted = delete_spam_rescue_protected_keyword(keyword_id, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Protected keyword not found")
     return {"deleted": True}
 
 

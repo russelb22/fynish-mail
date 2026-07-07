@@ -236,6 +236,40 @@ def test_spam_rescue_sync_suppresses_obvious_gmail_spam(api_client, isolated_db,
     assert "obvious-spam-1001" not in candidate_ids
 
 
+def test_spam_rescue_sync_uses_custom_protected_keyword(api_client, isolated_db, monkeypatch):
+    api_client.get("/api/features")
+    _seed_gmail_account_for_local_owner()
+    create_response = api_client.post(
+        "/api/settings/spam-rescue-protected-keywords",
+        json={"keyword": "zoning permit"},
+    )
+    assert create_response.status_code == 200
+    adapter = _FakeSpamAdapter(
+        [
+            _gmail_spam_message(
+                gmail_message_id="custom-keyword-spam-1001",
+                sender="Planning Office <permits@example.gov>",
+                reply_to="permits@example.gov",
+                subject="Zoning permit update",
+                snippet="Your zoning permit hearing has been scheduled.",
+                body_preview="Your zoning permit hearing has been scheduled for next week.",
+                has_attachments=0,
+            )
+        ]
+    )
+    monkeypatch.setattr("app.services.spam_rescue.get_mail_provider_adapter", lambda _: adapter)
+
+    response = api_client.post("/api/spam-rescue/sync")
+
+    assert response.status_code == 200
+    assert response.json()["surfaced_candidates"] == 1
+    candidate = _candidate_by_gmail_id(
+        api_client.get("/api/spam-rescue").json(),
+        "custom-keyword-spam-1001",
+    )
+    assert candidate["protection_reasons"] == ["Protected keywords detected: zoning permit"]
+
+
 def test_feature_flags_include_spam_rescue(api_client, isolated_db):
     response = api_client.get("/api/features")
 

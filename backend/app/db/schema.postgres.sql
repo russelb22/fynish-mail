@@ -243,6 +243,18 @@ CREATE TABLE IF NOT EXISTS ai_digest_domain_attention_notes (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_digest_attention_notes_user_domain_lower
 ON ai_digest_domain_attention_notes (user_id, lower(domain));
 
+CREATE TABLE IF NOT EXISTS spam_rescue_protected_keywords (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    keyword TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_spam_rescue_keywords_user_keyword_lower
+ON spam_rescue_protected_keywords (user_id, lower(keyword));
+
 CREATE TABLE IF NOT EXISTS writing_style_cards (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id),
