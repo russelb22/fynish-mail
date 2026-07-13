@@ -124,6 +124,18 @@ export interface SpamRescueAccount {
 export interface SpamRescueQueueResponse {
   accounts: SpamRescueAccount[]
   count: number
+  summary: {
+    accounts_checked: number
+    last_checked_at: string | null
+    candidate_count: number
+  }
+}
+
+export interface SpamRescueSyncResponse {
+  synced_messages: number
+  surfaced_candidates: number
+  reconciled_candidates: number
+  failed_accounts?: Array<{ account_email: string; provider: string; reason: string }>
 }
 
 export interface StagedSpamRescueCommitAction {

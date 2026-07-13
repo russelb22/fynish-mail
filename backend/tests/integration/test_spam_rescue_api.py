@@ -137,6 +137,9 @@ def test_spam_rescue_api_returns_mock_candidates(api_client, seeded_db):
     candidate_ids = {message["gmail_message_id"] for message in candidates}
 
     assert payload["count"] == len(candidates)
+    assert payload["summary"]["candidate_count"] == len(candidates)
+    assert payload["summary"]["accounts_checked"] >= 0
+    assert "last_checked_at" in payload["summary"]
     assert "ps-9001" in candidate_ids
     assert "ps-9002" not in candidate_ids
     assert all(message["source_label"] == "spam" for message in candidates)
@@ -228,6 +231,9 @@ def test_spam_rescue_sync_suppresses_obvious_gmail_spam(api_client, isolated_db,
     assert response.json()["surfaced_candidates"] == 0
 
     spam_queue = api_client.get("/api/spam-rescue").json()
+    assert spam_queue["summary"]["accounts_checked"] == 1
+    assert spam_queue["summary"]["candidate_count"] == 0
+    assert spam_queue["summary"]["last_checked_at"] is not None
     candidate_ids = {
         message["gmail_message_id"]
         for account in spam_queue["accounts"]

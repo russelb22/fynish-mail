@@ -1496,6 +1496,22 @@
   flex: 0 1 auto;
 }
 
+.spam-rescue-empty-state {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.spam-rescue-empty-state p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.spam-rescue-empty-state .spam-rescue-empty-warning {
+  color: #a9482d;
+}
+
 .queue-bootstrap-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));

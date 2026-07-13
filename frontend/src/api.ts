@@ -16,6 +16,7 @@ import type {
   ReminderSummary,
   ReviewQueueResponse,
   Rule,
+  SpamRescueSyncResponse,
   SpamRescueProtectedKeyword,
   SpamRescueQueueResponse,
   StagedQueueCommitAction,
@@ -224,12 +225,7 @@ export function syncUnread() {
 }
 
 export function syncSpamRescue() {
-  return request<{
-    synced_messages: number
-    surfaced_candidates: number
-    reconciled_candidates: number
-    failed_accounts?: Array<{ account_email: string; provider: string; reason: string }>
-  }>('/spam-rescue/sync', { method: 'POST' })
+  return request<SpamRescueSyncResponse>('/spam-rescue/sync', { method: 'POST' })
 }
 
 export function fetchReviewQueue() {

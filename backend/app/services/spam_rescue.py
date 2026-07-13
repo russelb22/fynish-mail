@@ -771,6 +771,8 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
 
         result_accounts = []
         total_count = 0
+        last_checked_at = None
+        checked_account_count = 0
         for account in accounts:
             account_record = MailAccountRecord.from_row(account)
             messages = []
@@ -802,6 +804,13 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
                 reverse=True,
             )
             total_count += len(messages)
+            if account_record.last_sync_at:
+                checked_account_count += 1
+                if (
+                    last_checked_at is None
+                    or account_record.last_sync_at > last_checked_at
+                ):
+                    last_checked_at = account_record.last_sync_at
             result_accounts.append(
                 {
                     "account_email": account_record.account_email,
@@ -811,7 +820,15 @@ def get_spam_rescue_queue(user_id: int | None = None) -> dict:
                 }
             )
 
-    return {"accounts": result_accounts, "count": total_count}
+    return {
+        "accounts": result_accounts,
+        "count": total_count,
+        "summary": {
+            "accounts_checked": checked_account_count,
+            "last_checked_at": last_checked_at,
+            "candidate_count": total_count,
+        },
+    }
 
 
 def commit_spam_rescue_actions(

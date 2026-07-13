@@ -63,6 +63,8 @@ import type {
   SpamRescueAccount,
   SpamRescueMessage,
   SpamRescueProtectedKeyword,
+  SpamRescueQueueResponse,
+  SpamRescueSyncResponse,
   WritingStyleCard,
 } from './types'
 
@@ -120,6 +122,8 @@ type SyncUnreadResult = {
   synced_messages: number
   failed_accounts?: FailedSyncAccount[]
 }
+
+type SpamRescueQueueSummary = SpamRescueQueueResponse['summary']
 
 const ACTION_LABELS: Record<Category, string> = {
   trash: 'Trash',
@@ -374,6 +378,23 @@ function formatSyncResultNotice(result: SyncUnreadResult) {
   return result.synced_messages > 0 ? `${syncedText} ${failedText}.` : `${failedText}.`
 }
 
+function formatSpamRescueFailedAccounts(failedAccounts: FailedSyncAccount[]) {
+  if (failedAccounts.length === 0) {
+    return null
+  }
+
+  const failedDetails = failedAccounts
+    .slice(0, 3)
+    .map((account) => `${account.account_email}: ${account.reason}`)
+    .join('; ')
+  const moreFailures =
+    failedAccounts.length > 3 ? `; and ${failedAccounts.length - 3} more` : ''
+
+  return failedAccounts.length === 1
+    ? `${failedAccounts[0].account_email} could not be checked: ${failedAccounts[0].reason}`
+    : `${failedAccounts.length} accounts could not be checked: ${failedDetails}${moreFailures}`
+}
+
 function accountAccessLabel(account: Account) {
   if (account.provider !== 'gmail_readonly') {
     return 'Mock'
@@ -504,6 +525,10 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [queue, setQueue] = useState<ReviewAccount[]>([])
   const [spamRescueQueue, setSpamRescueQueue] = useState<SpamRescueAccount[]>([])
+  const [spamRescueQueueSummary, setSpamRescueQueueSummary] =
+    useState<SpamRescueQueueSummary | null>(null)
+  const [lastSpamRescueSync, setLastSpamRescueSync] =
+    useState<SpamRescueSyncResponse | null>(null)
   const [processedMessages, setProcessedMessages] = useState<ProcessedMessage[]>([])
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null)
   const [digestSenderStatus, setDigestSenderStatus] = useState<DigestSenderStatus | null>(null)
@@ -593,7 +618,11 @@ function App() {
         : { cards: [] }
       const spamRescueData = featureData.features.spam_rescue
         ? await fetchSpamRescueQueue()
-        : { accounts: [], count: 0 }
+        : {
+            accounts: [],
+            count: 0,
+            summary: { accounts_checked: 0, last_checked_at: null, candidate_count: 0 },
+          }
       setProcessedMessages(processedData.messages)
       setExpandedProcessedId((current) =>
         current !== null && processedData.messages.some((message) => message.id === current)
@@ -606,6 +635,7 @@ function App() {
       setAuthStatus(authData)
       setFeatureFlags(featureData.features)
       setSpamRescueQueue(spamRescueData.accounts)
+      setSpamRescueQueueSummary(spamRescueData.summary)
       setNotificationSettings(settingsData.settings)
       setDigestSenderStatus(digestSenderData)
       setAiDigestAttentionNotes(attentionNotesData.notes)
@@ -875,6 +905,7 @@ function App() {
     try {
       const result = await syncUnread()
       const spamRescueResult = featureFlags.spam_rescue ? await syncSpamRescue() : null
+      setLastSpamRescueSync(spamRescueResult)
       await loadAll()
       const syncNotice = formatSyncResultNotice(result)
       if (spamRescueResult) {
@@ -1903,7 +1934,28 @@ function App() {
       {loading ? (
         <div className="empty-state">Loading Spam Rescue candidates...</div>
       ) : visibleSpamRescueCount === 0 && stagedSpamRescueList.length === 0 ? (
-        <div className="empty-state">No likely Spam false positives found.</div>
+        <div className="empty-state spam-rescue-empty-state">
+          <strong>No likely Spam false positives found.</strong>
+          {lastSpamRescueSync ? (
+            <p>
+              Spam Rescue scanned {lastSpamRescueSync.synced_messages} unread Spam messages and
+              surfaced {lastSpamRescueSync.surfaced_candidates} rescue candidates.
+            </p>
+          ) : spamRescueQueueSummary?.last_checked_at ? (
+            <p>
+              Last checked {formatRelativeDate(spamRescueQueueSummary.last_checked_at)} across{' '}
+              {spamRescueQueueSummary.accounts_checked}{' '}
+              {spamRescueQueueSummary.accounts_checked === 1 ? 'account' : 'accounts'}.
+            </p>
+          ) : (
+            <p>Refresh Gmail to scan unread Spam messages for possible false positives.</p>
+          )}
+          {lastSpamRescueSync?.failed_accounts?.length ? (
+            <p className="spam-rescue-empty-warning">
+              {formatSpamRescueFailedAccounts(lastSpamRescueSync.failed_accounts)}.
+            </p>
+          ) : null}
+        </div>
       ) : (
         activeVisibleSpamRescueQueue.map((account) => (
           <section key={account.account_email} className="account-card spam-rescue-account">
