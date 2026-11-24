@@ -52,43 +52,7 @@ export interface ReviewQueueResponse {
   accounts: ReviewAccount[]
 }
 
-export interface AutoResponseDraft {
-  message_id: number
-  provider: string
-  model: string
-  draft_body: string
-  caveats: string[]
-  style_source: string
-  style_source_path: string | null
-  style_card_id: number | null
-  draft_only: boolean
-}
-
-export interface AutoResponseSend {
-  status: string
-  message_id: number
-  account_email: string
-  to_email: string
-  subject: string
-  gmail_sent_message_id: string | null
-  gmail_thread_id: string | null
-  sent_at: string | null
-}
-
-export interface AutoResponseSendPreview {
-  message_id: number
-  account_email: string
-  to_email: string
-  subject: string
-  body_text: string
-  gmail_thread_id: string | null
-  context_source: string
-}
-
 export interface FeatureFlags {
-  auto_response_drafts: boolean
-  auto_response_send: boolean
-  writing_style_cards: boolean
   spam_rescue: boolean
 }
 
@@ -178,29 +142,6 @@ export interface DigestSenderStatus {
     auth_status: string
     auth_status_reason: string | null
   } | null
-}
-
-export interface WritingStyleCard {
-  id: number
-  user_id: number
-  mail_account_id: number | null
-  account_email: string
-  status: string
-  source_provider: string
-  sample_start_date: string | null
-  sample_end_date: string | null
-  sample_bucket_count: number
-  sampled_message_count: number
-  sampled_word_count: number
-  style_card_markdown: string
-  user_edited: boolean
-  edited_at: string | null
-  generator_model: string | null
-  generated_at: string
-  approved_at: string | null
-  disabled_at: string | null
-  created_at: string
-  updated_at: string
 }
 
 export interface StagedQueueCommitAction {
@@ -314,18 +255,6 @@ export interface NotificationSettings {
   send_only_if_queue_nonempty: boolean
   digest_enabled: boolean
   digest_time: string
-  ai_digest_summary_enabled: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface AiDigestAttentionNote {
-  id: number
-  user_id: number
-  domain: string
-  label: string
-  note: string
-  enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -353,23 +282,6 @@ export interface DigestProcessedMessage {
   preview: string
   user_overrode: boolean
   created_rule_id: number | null
-}
-
-export interface AiDigestSummary {
-  generated: boolean
-  provider: string
-  model: string
-  headline: string
-  summary: string
-  key_takeaways: string[]
-  auto_clean_review: {
-    count: number
-    summary: string
-    notable_items: Array<{ subject: string; reason: string }>
-  }
-  notable_kept_messages: Array<{ subject: string; reason: string }>
-  top_noise_sources: Array<{ sender_domain: string; summary: string }>
-  caveats: string[]
 }
 
 export interface DigestSenderDomainSummary {
@@ -400,8 +312,6 @@ export interface ProcessedDigestPreview {
   frontend_url: string
   digest_enabled: boolean
   digest_time: string
-  ai_summary_enabled: boolean
-  ai_summary: AiDigestSummary | null
   plain_text_preview: string
   html_preview: string
 }

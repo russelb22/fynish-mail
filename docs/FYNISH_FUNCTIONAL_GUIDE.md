@@ -332,13 +332,7 @@ The Settings view currently contains:
 - a compact summary of active current behavior
 - digest sender connection controls
 - daily digest scheduling controls
-- per-user AI digest summary toggle
-- AI digest attention notes
-- temporary development/testing controls when running locally
-
-AI digest attention notes are user-scoped notes for sender domains such as `example.net` or `truecoach.co`.
-
-They guide only the AI-generated daily digest briefing. They do not change Gmail actions, Review Queue classification, rules, auto-cleaning, or processed-mail history.
+- a daily digest of processed mail with counts and message details, generated without an AI service
 
 Reminder controls and digest previews are no longer part of the normal current product surface.
 

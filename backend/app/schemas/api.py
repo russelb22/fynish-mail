@@ -19,33 +19,6 @@ class MessageActionRequest(BaseModel):
     action: Category
 
 
-class AutoResponseDraftRequest(BaseModel):
-    user_guidance: str | None = Field(default=None, max_length=1200)
-
-
-class AutoResponseSendRequest(BaseModel):
-    idempotency_key: str = Field(min_length=1)
-    draft_body: str = Field(min_length=1, max_length=8000)
-    to_email_override: str | None = None
-    cc: list[str] = Field(default_factory=list)
-    bcc: list[str] = Field(default_factory=list)
-    confirmed: bool = False
-    include_context: bool = True
-
-
-class AutoResponseSendPreviewRequest(BaseModel):
-    draft_body: str = Field(min_length=1, max_length=8000)
-    to_email_override: str | None = None
-
-
-class WritingStyleCardCreateRequest(BaseModel):
-    mail_account_id: int | None = Field(default=None, gt=0)
-
-
-class WritingStyleCardUpdateRequest(BaseModel):
-    style_card_markdown: str = Field(min_length=80, max_length=8000)
-
-
 class BulkMessageActionItem(BaseModel):
     message_id: int
     action: Category
@@ -172,20 +145,6 @@ class NotificationSettingsUpdateRequest(BaseModel):
     digest_enabled: bool | None = None
     digest_time: str | None = None
     ai_digest_summary_enabled: bool | None = None
-
-
-class AIDigestAttentionNoteCreateRequest(BaseModel):
-    domain: str
-    label: str | None = None
-    note: str
-    enabled: bool = True
-
-
-class AIDigestAttentionNoteUpdateRequest(BaseModel):
-    domain: str | None = None
-    label: str | None = None
-    note: str | None = None
-    enabled: bool | None = None
 
 
 class SpamRescueProtectedKeywordCreateRequest(BaseModel):

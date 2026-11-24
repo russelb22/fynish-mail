@@ -6,4 +6,3 @@ psycopg[binary]==3.2.9
 google-api-python-client==2.183.0
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.2
-openai>=1.109.1,<2

@@ -18,7 +18,6 @@ from app.services.notification_settings import NotificationSettingsValidationErr
 from app.services.review_queue import UnsafeMessageActionError
 from app.services.rules import RuleAccountUnavailableError, RuleSourceMessageUnavailableError
 from app.services.spam_rescue_keywords import SpamRescueKeywordValidationError
-from app.services.writing_style_cards import WritingStyleCardSamplingError
 
 GMAIL_RECONNECT_REQUIRED = "gmail_reconnect_required"
 GMAIL_OAUTH_NOT_CONFIGURED = "gmail_oauth_not_configured"
@@ -97,7 +96,6 @@ def http_exception_for_error(
             RuleAccountUnavailableError,
             RuleSourceMessageUnavailableError,
             UnsafeMessageActionError,
-            WritingStyleCardSamplingError,
         ),
     ):
         message = str(error)

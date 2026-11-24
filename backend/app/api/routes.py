@@ -6,11 +6,6 @@ from app.core import config
 from app.core.errors import http_exception_for_error
 from app.api.dependencies import CurrentUser, require_current_user
 from app.schemas.api import (
-    AIDigestAttentionNoteCreateRequest,
-    AIDigestAttentionNoteUpdateRequest,
-    AutoResponseDraftRequest,
-    AutoResponseSendPreviewRequest,
-    AutoResponseSendRequest,
     BulkApplyRequest,
     MessageActionRequest,
     NotificationSettingsUpdateRequest,
@@ -20,8 +15,6 @@ from app.schemas.api import (
     SpamRescueProtectedKeywordCreateRequest,
     SpamRescueProtectedKeywordUpdateRequest,
     StagedActionsCommitRequest,
-    WritingStyleCardCreateRequest,
-    WritingStyleCardUpdateRequest,
 )
 from app.services.auto_sync import scheduled_sync_service
 from app.services.digests import build_processed_digest_payload
@@ -30,41 +23,11 @@ from app.services.notification_settings import (
     get_notification_settings,
     update_notification_settings,
 )
-from app.services.ai_digest_attention_notes import (
-    create_ai_digest_attention_note,
-    delete_ai_digest_attention_note,
-    list_ai_digest_attention_notes,
-    update_ai_digest_attention_note,
-)
 from app.services.spam_rescue_keywords import (
     create_spam_rescue_protected_keyword,
     delete_spam_rescue_protected_keyword,
     list_spam_rescue_protected_keywords,
     update_spam_rescue_protected_keyword,
-)
-from app.services.auto_response_draft import (
-    AutoResponseDraftError,
-    AutoResponseDraftNotConfiguredError,
-    auto_response_drafts_allowed_for_email,
-    generate_auto_response_draft,
-)
-from app.services.auto_response_send import (
-    AutoResponseSendError,
-    AutoResponseSendNotConfiguredError,
-    AutoResponseSendValidationError,
-    auto_response_send_allowed_for_email,
-    preview_auto_response_send,
-    send_auto_response,
-)
-from app.services.writing_style_cards import (
-    WritingStyleCardSamplingError,
-    WritingStyleCardValidationError,
-    approve_writing_style_card,
-    disable_writing_style_card,
-    list_writing_style_cards,
-    sample_sent_mail_writing_style_card,
-    update_writing_style_card,
-    writing_style_cards_allowed_for_email,
 )
 from app.services.processed_mail import list_processed_messages
 from app.services.accounts import (
@@ -130,13 +93,14 @@ def healthcheck():
     return {"status": "ok"}
 
 
+# Retired feature flags stay false for clients from before the cleanup.
 @router.get("/features")
 def feature_flags(current_user: CurrentUser = Depends(require_current_user)):
     return {
         "features": {
-            "auto_response_drafts": auto_response_drafts_allowed_for_email(current_user.email),
-            "auto_response_send": auto_response_send_allowed_for_email(current_user.email),
-            "writing_style_cards": writing_style_cards_allowed_for_email(current_user.email),
+            "auto_response_drafts": False,
+            "auto_response_send": False,
+            "writing_style_cards": False,
             "spam_rescue": config.SPAM_RESCUE_ENABLED,
         }
     }
@@ -423,6 +387,14 @@ def reminder_summary(current_user: CurrentUser = Depends(require_current_user)):
     return get_reminder_summary(user_id=current_user.id)
 
 
+@router.get("/settings/ai-digest-attention-notes", include_in_schema=False)
+def retired_ai_digest_attention_notes(
+    _current_user: CurrentUser = Depends(require_current_user),
+):
+    # Older web bundles fetch this on startup. Never return stored notes.
+    return {"notes": []}
+
+
 @router.get("/digests/processed/preview")
 def processed_digest_preview(current_user: CurrentUser = Depends(require_current_user)):
     return {"digest": build_processed_digest_payload(user_id=current_user.id)}
@@ -446,56 +418,6 @@ def update_notification_settings_route(
     except ValueError as error:
         raise http_exception_for_error(error) from error
     return {"settings": settings}
-
-
-@router.get("/settings/ai-digest-attention-notes")
-def ai_digest_attention_notes(current_user: CurrentUser = Depends(require_current_user)):
-    return {"notes": list_ai_digest_attention_notes(user_id=current_user.id)}
-
-
-@router.post("/settings/ai-digest-attention-notes")
-def create_ai_digest_attention_note_route(
-    payload: AIDigestAttentionNoteCreateRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    try:
-        note = create_ai_digest_attention_note(
-            payload.model_dump(),
-            user_id=current_user.id,
-        )
-    except ValueError as error:
-        raise http_exception_for_error(error) from error
-    return {"note": note}
-
-
-@router.patch("/settings/ai-digest-attention-notes/{note_id}")
-def update_ai_digest_attention_note_route(
-    note_id: int,
-    payload: AIDigestAttentionNoteUpdateRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    try:
-        note = update_ai_digest_attention_note(
-            note_id,
-            payload.model_dump(exclude_unset=True),
-            user_id=current_user.id,
-        )
-    except ValueError as error:
-        raise http_exception_for_error(error) from error
-    if note is None:
-        raise HTTPException(status_code=404, detail="Attention note not found")
-    return {"note": note}
-
-
-@router.delete("/settings/ai-digest-attention-notes/{note_id}")
-def delete_ai_digest_attention_note_route(
-    note_id: int,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    deleted = delete_ai_digest_attention_note(note_id, user_id=current_user.id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Attention note not found")
-    return {"deleted": True}
 
 
 @router.get("/settings/spam-rescue-protected-keywords")
@@ -548,82 +470,6 @@ def delete_spam_rescue_protected_keyword_route(
     return {"deleted": True}
 
 
-@router.get("/settings/writing-style-cards")
-def writing_style_cards(current_user: CurrentUser = Depends(require_current_user)):
-    if not writing_style_cards_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Writing style cards are not enabled for this user.")
-    return {"cards": list_writing_style_cards(user_id=current_user.id)}
-
-
-@router.post("/settings/writing-style-cards")
-def create_writing_style_card_route(
-    payload: WritingStyleCardCreateRequest | None = None,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not writing_style_cards_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Writing style cards are not enabled for this user.")
-    try:
-        card = sample_sent_mail_writing_style_card(
-            user_id=current_user.id,
-            account_email=current_user.email,
-        )
-    except WritingStyleCardSamplingError as error:
-        raise http_exception_for_error(error, status_code=409) from error
-    except WritingStyleCardValidationError as error:
-        raise http_exception_for_error(error, status_code=409) from error
-    return {"card": card}
-
-
-@router.patch("/settings/writing-style-cards/{card_id}")
-def update_writing_style_card_route(
-    card_id: int,
-    payload: WritingStyleCardUpdateRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not writing_style_cards_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Writing style cards are not enabled for this user.")
-    try:
-        card = update_writing_style_card(
-            card_id,
-            payload.model_dump(),
-            user_id=current_user.id,
-        )
-    except WritingStyleCardValidationError as error:
-        raise http_exception_for_error(error) from error
-    if card is None:
-        raise HTTPException(status_code=404, detail="Writing style card not found")
-    return {"card": card}
-
-
-@router.post("/settings/writing-style-cards/{card_id}/approve")
-def approve_writing_style_card_route(
-    card_id: int,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not writing_style_cards_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Writing style cards are not enabled for this user.")
-    try:
-        card = approve_writing_style_card(card_id, user_id=current_user.id)
-    except WritingStyleCardValidationError as error:
-        raise http_exception_for_error(error) from error
-    if card is None:
-        raise HTTPException(status_code=404, detail="Writing style card not found")
-    return {"card": card}
-
-
-@router.post("/settings/writing-style-cards/{card_id}/disable")
-def disable_writing_style_card_route(
-    card_id: int,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not writing_style_cards_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Writing style cards are not enabled for this user.")
-    card = disable_writing_style_card(card_id, user_id=current_user.id)
-    if card is None:
-        raise HTTPException(status_code=404, detail="Writing style card not found")
-    return {"card": card}
-
-
 @router.post("/messages/{message_id}/action")
 def message_action(
     message_id: int,
@@ -637,90 +483,6 @@ def message_action(
     if result is None:
         raise HTTPException(status_code=404, detail="Message not found")
     return result
-
-
-@router.post("/messages/{message_id}/auto-response-draft")
-def auto_response_draft_route(
-    message_id: int,
-    payload: AutoResponseDraftRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not auto_response_drafts_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Auto-Respond is not enabled for this user.")
-
-    try:
-        result = generate_auto_response_draft(
-            message_id,
-            user_id=current_user.id,
-            user_email=current_user.email,
-            user_guidance=payload.user_guidance or "",
-        )
-    except AutoResponseDraftNotConfiguredError as error:
-        raise http_exception_for_error(error, status_code=503) from error
-    except AutoResponseDraftError as error:
-        raise http_exception_for_error(error, status_code=502) from error
-    if result is None:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return {"draft": result}
-
-
-@router.post("/messages/{message_id}/auto-response-send-preview")
-def auto_response_send_preview_route(
-    message_id: int,
-    payload: AutoResponseSendPreviewRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not auto_response_send_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Auto-Respond send is not enabled for this user.")
-
-    try:
-        result = preview_auto_response_send(
-            message_id,
-            user_id=current_user.id,
-            draft_body=payload.draft_body,
-            to_email_override=payload.to_email_override,
-        )
-    except AutoResponseSendValidationError as error:
-        raise http_exception_for_error(error, status_code=422) from error
-    except AutoResponseSendNotConfiguredError as error:
-        raise http_exception_for_error(error, status_code=503) from error
-    except AutoResponseSendError as error:
-        raise http_exception_for_error(error, status_code=502) from error
-    if result is None:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return {"preview": result.to_dict()}
-
-
-@router.post("/messages/{message_id}/auto-response-send")
-def auto_response_send_route(
-    message_id: int,
-    payload: AutoResponseSendRequest,
-    current_user: CurrentUser = Depends(require_current_user),
-):
-    if not auto_response_send_allowed_for_email(current_user.email):
-        raise HTTPException(status_code=403, detail="Auto-Respond send is not enabled for this user.")
-
-    try:
-        result = send_auto_response(
-            message_id,
-            user_id=current_user.id,
-            idempotency_key=payload.idempotency_key,
-            draft_body=payload.draft_body,
-            confirmed=payload.confirmed,
-            to_email_override=payload.to_email_override,
-            cc=payload.cc,
-            bcc=payload.bcc,
-            include_context=payload.include_context,
-        )
-    except AutoResponseSendValidationError as error:
-        raise http_exception_for_error(error, status_code=422) from error
-    except AutoResponseSendNotConfiguredError as error:
-        raise http_exception_for_error(error, status_code=503) from error
-    except AutoResponseSendError as error:
-        raise http_exception_for_error(error, status_code=502) from error
-    if result is None:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return {"send": result.to_dict()}
 
 
 @router.post("/messages/{message_id}/live-plan")

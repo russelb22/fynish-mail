@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import FRONTEND_URL, SCHEDULED_DIGESTS_ENABLED
 from app.db.runtime import execute_sql, fetch_all, fetch_one, get_connection, insert_and_return_id
-from app.services.ai_digest_summary import build_ai_digest_summary
 from app.services.digest_sender import validate_gmail_digest_sender
 from app.services.mailer import MailDeliveryError, MailerNotConfiguredError, send_email
 from app.services.notification_settings import get_notification_settings
@@ -523,31 +522,11 @@ def build_processed_digest_payload(
         "frontend_url": FRONTEND_URL,
         "digest_enabled": bool(settings.get("digest_enabled")),
         "digest_time": settings.get("digest_time") or "17:00",
-        "ai_summary_enabled": bool(settings.get("ai_digest_summary_enabled")),
+        # Legacy preview shape; the model call and rendering have been retired.
+        "ai_summary_enabled": False,
         "ai_summary": None,
         "ai_summary_error": None,
     }
-    ai_summary_expected = (
-        bool(settings.get("ai_digest_summary_enabled"))
-        and processed_count > 0
-    )
-    try:
-        payload["ai_summary"] = build_ai_digest_summary(
-            payload,
-            user_id=effective_user_id,
-            enabled_for_user=bool(settings.get("ai_digest_summary_enabled")),
-        )
-    except Exception as error:
-        logger.warning(
-            "AI digest summary failed before rendering digest for user %s: %s",
-            effective_user_id,
-            error,
-        )
-        payload["ai_summary"] = None
-    if ai_summary_expected and payload["ai_summary"] is None:
-        payload["ai_summary_error"] = (
-            "AI summary was unavailable, so this digest was sent with the standard summary only."
-        )
     payload["plain_text_preview"] = render_processed_digest_text(payload)
     payload["html_preview"] = render_processed_digest_html(payload)
     return payload
@@ -572,23 +551,6 @@ def render_processed_digest_text(payload: dict) -> str:
         lines.append(
             f"- {DIGEST_ACTION_LABELS[action]}: {payload['counts_by_action'].get(action, 0)}"
         )
-
-    ai_summary = payload.get("ai_summary")
-    if ai_summary:
-        lines.extend(["", "Today's inbox briefing:"])
-        if ai_summary.get("headline"):
-            lines.append(str(ai_summary["headline"]))
-        if ai_summary.get("summary"):
-            lines.extend(["", str(ai_summary["summary"])])
-        if ai_summary.get("key_takeaways"):
-            lines.extend(["", "Worth noticing:"])
-            for takeaway in ai_summary["key_takeaways"]:
-                lines.append(f"- {takeaway}")
-        auto_clean_review = ai_summary.get("auto_clean_review") or {}
-        if auto_clean_review.get("summary"):
-            lines.extend(["", f"Auto-clean review: {auto_clean_review['summary']}"])
-    elif payload.get("ai_summary_error"):
-        lines.extend(["", str(payload["ai_summary_error"])])
 
     lines.extend(["", "Processed Mail:"])
 
@@ -646,56 +608,6 @@ def _source_badge_html(source: str, label: str) -> str:
     )
 
 
-def _render_ai_summary_html(ai_summary: dict | None) -> str:
-    if not ai_summary:
-        return ""
-
-    headline = escape(str(ai_summary.get("headline") or "Today's inbox briefing"))
-    summary = escape(str(ai_summary.get("summary") or ""))
-    key_takeaways = ai_summary.get("key_takeaways") or []
-    auto_clean_review = ai_summary.get("auto_clean_review") or {}
-    notable_kept_messages = ai_summary.get("notable_kept_messages") or []
-    top_noise_sources = ai_summary.get("top_noise_sources") or []
-    caveats = ai_summary.get("caveats") or []
-
-    takeaway_html = "".join(
-        f'<li style="margin:0 0 6px;">{escape(str(item))}</li>'
-        for item in key_takeaways[:5]
-    )
-    notable_html = "".join(
-        f"""
-        <li style="margin:0 0 6px;">
-          <strong>{escape(str(item.get("subject") or "Untitled"))}</strong>
-          <span style="color:#6b7280;"> - {escape(str(item.get("reason") or ""))}</span>
-        </li>
-        """
-        for item in notable_kept_messages[:5]
-    )
-    noise_html = "".join(
-        f"""
-        <li style="margin:0 0 6px;">
-          <strong>{escape(str(item.get("sender_domain") or "unknown"))}</strong>
-          <span style="color:#6b7280;"> - {escape(str(item.get("summary") or ""))}</span>
-        </li>
-        """
-        for item in top_noise_sources[:5]
-    )
-    caveat_text = " ".join(str(caveat) for caveat in caveats[:2])
-
-    return f"""
-        <div style="padding:22px 26px; border-bottom:1px solid #e5e7eb; background:#fbfcfd;">
-          <h2 style="font-size:18px; margin:0 0 8px; color:#111827;">Today's inbox briefing</h2>
-          <div style="font-size:16px; font-weight:800; color:#111827; line-height:1.35;">{headline}</div>
-          <p style="font-size:14px; color:#374151; line-height:1.55; margin:8px 0 0;">{summary}</p>
-          {f'<h3 style="font-size:13px; margin:16px 0 6px; color:#111827;">Worth noticing</h3><ul style="margin:0; padding-left:18px; font-size:13px; color:#374151; line-height:1.5;">{takeaway_html}</ul>' if takeaway_html else ''}
-          {f'<h3 style="font-size:13px; margin:16px 0 6px; color:#111827;">Auto-clean review</h3><p style="font-size:13px; color:#374151; line-height:1.5; margin:0;">{escape(str(auto_clean_review.get("summary") or ""))}</p>' if auto_clean_review.get("summary") else ''}
-          {f'<h3 style="font-size:13px; margin:16px 0 6px; color:#111827;">Notable kept messages</h3><ul style="margin:0; padding-left:18px; font-size:13px; color:#374151; line-height:1.5;">{notable_html}</ul>' if notable_html else ''}
-          {f'<h3 style="font-size:13px; margin:16px 0 6px; color:#111827;">Top noise sources</h3><ul style="margin:0; padding-left:18px; font-size:13px; color:#374151; line-height:1.5;">{noise_html}</ul>' if noise_html else ''}
-          {f'<p style="font-size:12px; color:#6b7280; line-height:1.45; margin:14px 0 0;">{escape(caveat_text)}</p>' if caveat_text else ''}
-        </div>
-    """
-
-
 def render_processed_digest_html(payload: dict) -> str:
     frontend_url = str(payload["frontend_url"]).rstrip("/")
     processed_url = f"{frontend_url}/?view=processed"
@@ -704,15 +616,6 @@ def render_processed_digest_html(payload: dict) -> str:
     auto_clean_count = int(
         payload.get("counts_by_source", {}).get("high_confidence_auto_clean", 0)
     )
-    ai_summary_html = _render_ai_summary_html(payload.get("ai_summary"))
-    ai_summary_error_html = ""
-    if payload.get("ai_summary_error"):
-        ai_summary_error_html = f"""
-        <div style="padding:16px 26px; border-bottom:1px solid #e5e7eb; background:#fff7ed;">
-          <div style="font-size:13px; color:#9a3412; line-height:1.5; font-weight:700;">{escape(str(payload["ai_summary_error"]))}</div>
-        </div>
-        """
-
     action_cells = []
     for action in DIGEST_ACTION_ORDER:
         label = DIGEST_ACTION_LABELS[action]
@@ -846,8 +749,6 @@ def render_processed_digest_html(payload: dict) -> str:
           </table>
         </div>
 
-        {ai_summary_html}
-        {ai_summary_error_html}
 
         <div style="padding:22px 26px; border-bottom:1px solid #e5e7eb;">
           <h2 style="font-size:18px; margin:0 0 12px; color:#111827;">Processed Mail</h2>

@@ -2,7 +2,7 @@
 
 This file gives coding agents a shared operating guide for working in the public Fynish Mail repository.
 
-Fynish Mail is an open Gmail triage app in active V1 development. The product centers on an explainable review queue, reusable rules, staged and reversible Gmail actions, processed-mail history, and optional AI-assisted digest features.
+Fynish Mail is an open Gmail triage app in active V1 development. The product centers on an explainable review queue, reusable rules, staged and reversible Gmail actions, processed-mail history, and a scheduled daily digest.
 
 ## First Read
 

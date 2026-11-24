@@ -3,22 +3,16 @@ import './App.css'
 import fynishMailLogo from './assets/fynish-mail-logo.svg'
 import {
   ApiError,
-  approveWritingStyleCard,
   commitStagedSpamRescueActions,
   commitStagedQueueActions,
   connectGmailModifyAccount,
   connectMockAccount,
-  createWritingStyleCard,
-  createAiDigestAttentionNote,
   createSpamRescueProtectedKeyword,
-  deleteAiDigestAttentionNote,
   deleteSpamRescueProtectedKeyword,
   createRule,
   deleteRule,
-  disableWritingStyleCard,
   disableAccount,
   enableAccount,
-  fetchAiDigestAttentionNotes,
   fetchAccounts,
   fetchCurrentUser,
   fetchDigestSenderStatus,
@@ -28,29 +22,20 @@ import {
   fetchReviewQueue,
   fetchSpamRescueQueue,
   fetchSpamRescueProtectedKeywords,
-  fetchWritingStyleCards,
   recoverProcessedMessage,
   fetchRules,
-  generateAutoResponseDraft,
   logoutCurrentUser,
-  previewAutoResponseSend,
-  sendAutoResponse,
   startDigestSenderConnect,
   startHostedGmailConnect,
-  updateAiDigestAttentionNote,
   updateSpamRescueProtectedKeyword,
   syncSpamRescue,
   syncUnread,
   updateNotificationSettings,
-  updateWritingStyleCard,
   updateRule,
 } from './api'
 import type {
   Account,
-  AiDigestAttentionNote,
   AuthStatus,
-  AutoResponseDraft,
-  AutoResponseSend,
   Category,
   DigestSenderStatus,
   FeatureFlags,
@@ -65,18 +50,12 @@ import type {
   SpamRescueProtectedKeyword,
   SpamRescueQueueResponse,
   SpamRescueSyncResponse,
-  WritingStyleCard,
 } from './types'
 
 type ViewName = 'queue' | 'spam_rescue' | 'processed' | 'rules' | 'accounts' | 'settings'
 
 type ActionMap = Record<number, Category>
 type SettingsFieldErrors = Partial<Record<'recipient_email' | 'digest_time' | 'timezone', string>>
-type AttentionNoteDraft = {
-  domain: string
-  label: string
-  note: string
-}
 type ProtectedKeywordDraft = {
   keyword: string
 }
@@ -175,9 +154,6 @@ const SCROLL_TOP_VIEWS = new Set<ViewName>(['queue', 'spam_rescue', 'processed',
 const SCROLL_TOP_SHOW_THRESHOLD = 360
 const SCROLL_TOP_HIDE_THRESHOLD = 240
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  auto_response_drafts: false,
-  auto_response_send: false,
-  writing_style_cards: false,
   spam_rescue: false,
 }
 
@@ -297,13 +273,6 @@ function processedActionClassName(action: string) {
     default:
       return queueCategoryClassName(action)
   }
-}
-
-function createIdempotencyKey(prefix: string) {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 function decodeHtmlEntities(value: string) {
@@ -452,18 +421,6 @@ function settingsFieldErrorsFromError(error: unknown): SettingsFieldErrors {
   }
   return {}
 }
-
-function attentionNoteDraftsFromNotes(notes: AiDigestAttentionNote[]) {
-  return notes.reduce<Record<number, AttentionNoteDraft>>((drafts, note) => {
-    drafts[note.id] = {
-      domain: note.domain,
-      label: note.label,
-      note: note.note,
-    }
-    return drafts
-  }, {})
-}
-
 function protectedKeywordDraftsFromKeywords(keywords: SpamRescueProtectedKeyword[]) {
   return keywords.reduce<Record<number, ProtectedKeywordDraft>>((drafts, keyword) => {
     drafts[keyword.id] = {
@@ -532,26 +489,12 @@ function App() {
   const [processedMessages, setProcessedMessages] = useState<ProcessedMessage[]>([])
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null)
   const [digestSenderStatus, setDigestSenderStatus] = useState<DigestSenderStatus | null>(null)
-  const [aiDigestAttentionNotes, setAiDigestAttentionNotes] = useState<AiDigestAttentionNote[]>([])
-  const [attentionNoteDrafts, setAttentionNoteDrafts] = useState<Record<number, AttentionNoteDraft>>({})
   const [spamRescueProtectedKeywords, setSpamRescueProtectedKeywords] = useState<SpamRescueProtectedKeyword[]>([])
   const [protectedKeywordDrafts, setProtectedKeywordDrafts] = useState<Record<number, ProtectedKeywordDraft>>({})
-  const [writingStyleCards, setWritingStyleCards] = useState<WritingStyleCard[]>([])
-  const [writingStyleDrafts, setWritingStyleDrafts] = useState<Record<number, string>>({})
-  const [newAttentionDomain, setNewAttentionDomain] = useState('')
-  const [newAttentionLabel, setNewAttentionLabel] = useState('')
-  const [newAttentionNote, setNewAttentionNote] = useState('')
   const [newProtectedKeyword, setNewProtectedKeyword] = useState('')
   const [settingsErrors, setSettingsErrors] = useState<SettingsFieldErrors>({})
   const [expandedProcessedId, setExpandedProcessedId] = useState<number | null>(null)
   const [expandedQueuePreviewId, setExpandedQueuePreviewId] = useState<number | null>(null)
-  const [autoResponseMessage, setAutoResponseMessage] = useState<ReviewMessage | null>(null)
-  const [autoResponseGuidance, setAutoResponseGuidance] = useState('')
-  const [autoResponseDraft, setAutoResponseDraft] = useState<AutoResponseDraft | null>(null)
-  const [autoResponseDraftBody, setAutoResponseDraftBody] = useState('')
-  const [autoResponseSendResult, setAutoResponseSendResult] = useState<AutoResponseSend | null>(null)
-  const [autoResponseBusy, setAutoResponseBusy] = useState(false)
-  const [autoResponseError, setAutoResponseError] = useState<string | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [authStatus, setAuthStatus] = useState<AuthStatus>({
     auth_enabled: false,
@@ -598,7 +541,6 @@ function App() {
         authData,
         settingsData,
         digestSenderData,
-        attentionNotesData,
         protectedKeywordsData,
         featureData,
       ] = await Promise.all([
@@ -609,13 +551,9 @@ function App() {
         fetchCurrentUser(),
         fetchNotificationSettings(),
         fetchDigestSenderStatus(),
-        fetchAiDigestAttentionNotes(),
         fetchSpamRescueProtectedKeywords(),
         fetchFeatureFlags(),
       ])
-      const styleCardsData = featureData.features.writing_style_cards
-        ? await fetchWritingStyleCards()
-        : { cards: [] }
       const spamRescueData = featureData.features.spam_rescue
         ? await fetchSpamRescueQueue()
         : {
@@ -638,16 +576,8 @@ function App() {
       setSpamRescueQueueSummary(spamRescueData.summary)
       setNotificationSettings(settingsData.settings)
       setDigestSenderStatus(digestSenderData)
-      setAiDigestAttentionNotes(attentionNotesData.notes)
-      setAttentionNoteDrafts(attentionNoteDraftsFromNotes(attentionNotesData.notes))
       setSpamRescueProtectedKeywords(protectedKeywordsData.keywords)
       setProtectedKeywordDrafts(protectedKeywordDraftsFromKeywords(protectedKeywordsData.keywords))
-      setWritingStyleCards(styleCardsData.cards)
-      setWritingStyleDrafts(
-        Object.fromEntries(
-          styleCardsData.cards.map((card) => [card.id, card.style_card_markdown]),
-        ),
-      )
       const nextActions: ActionMap = {}
 
       queueData.accounts.forEach((account) => {
@@ -723,21 +653,6 @@ function App() {
       }),
     [accounts, canUseDevelopmentHarness, showMockAccounts],
   )
-
-  const signedInStyleEmail = authStatus.user?.email ?? 'the signed-in Fynish user'
-
-  const signedInWritingStyleCards = useMemo(() => {
-    const userEmail = authStatus.user?.email?.toLowerCase()
-    const activeStatuses = new Set(['draft', 'approved'])
-    if (!userEmail) {
-      return writingStyleCards.filter((card) => activeStatuses.has(card.status))
-    }
-    return writingStyleCards.filter(
-      (card) =>
-        card.account_email.toLowerCase() === userEmail &&
-        activeStatuses.has(card.status),
-    )
-  }, [authStatus.user?.email, writingStyleCards])
 
   const latestVisibleAccountSyncAt = useMemo(() => {
     const timestamps = visibleAccounts
@@ -1212,19 +1127,6 @@ function App() {
     return () => window.removeEventListener('keydown', handleReviewQueueKeyboard)
   }, [busy, commitBusy, loading, nextReviewMessage, stagedList.length, view])
 
-  useEffect(() => {
-    function handleAutoResponseEscape(event: KeyboardEvent) {
-      if (!autoResponseMessage || autoResponseBusy || event.key !== 'Escape') {
-        return
-      }
-      event.preventDefault()
-      closeAutoResponseModal()
-    }
-
-    window.addEventListener('keydown', handleAutoResponseEscape)
-    return () => window.removeEventListener('keydown', handleAutoResponseEscape)
-  }, [autoResponseBusy, autoResponseMessage])
-
   async function handleCreateManualRule() {
     if (!newRulePattern.trim()) {
       setNotice('Add a pattern before creating a rule.')
@@ -1353,7 +1255,6 @@ function App() {
         timezone: notificationSettings.timezone,
         digest_enabled: notificationSettings.digest_enabled,
         digest_time: notificationSettings.digest_time,
-        ai_digest_summary_enabled: notificationSettings.ai_digest_summary_enabled,
       })
       setNotificationSettings(response.settings)
       setNotice(
@@ -1391,174 +1292,10 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
 
-  async function refreshAttentionNotes() {
-    const response = await fetchAiDigestAttentionNotes()
-    setAiDigestAttentionNotes(response.notes)
-    setAttentionNoteDrafts(attentionNoteDraftsFromNotes(response.notes))
-  }
-
   async function refreshProtectedKeywords() {
     const response = await fetchSpamRescueProtectedKeywords()
     setSpamRescueProtectedKeywords(response.keywords)
     setProtectedKeywordDrafts(protectedKeywordDraftsFromKeywords(response.keywords))
-  }
-
-  async function refreshWritingStyleCards() {
-    if (!featureFlags.writing_style_cards) {
-      setWritingStyleCards([])
-      setWritingStyleDrafts({})
-      return
-    }
-    const response = await fetchWritingStyleCards()
-    setWritingStyleCards(response.cards)
-    setWritingStyleDrafts(
-      Object.fromEntries(
-        response.cards.map((card) => [card.id, card.style_card_markdown]),
-      ),
-    )
-  }
-
-  function updateWritingStyleDraft(cardId: number, value: string) {
-    setWritingStyleDrafts((current) => ({ ...current, [cardId]: value }))
-  }
-
-  async function handleCreateWritingStyleCard() {
-    setBusy(true)
-    setNotice('Sampling Gmail Sent mail to build a draft writing style card...')
-    try {
-      await createWritingStyleCard()
-      await refreshWritingStyleCards()
-      setNotice('Sampled Sent mail and built a draft writing style card. Review, edit, and approve it when it feels right.')
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to sample Sent mail for a writing style card.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleSaveWritingStyleCard(card: WritingStyleCard) {
-    const draft = writingStyleDrafts[card.id] ?? card.style_card_markdown
-    setBusy(true)
-    setNotice(`Saving writing style card for ${card.account_email}...`)
-    try {
-      await updateWritingStyleCard(card.id, { style_card_markdown: draft })
-      await refreshWritingStyleCards()
-      setNotice(`Writing style card saved for ${card.account_email}.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to save style card for ${card.account_email}.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleApproveWritingStyleCard(card: WritingStyleCard) {
-    const draft = writingStyleDrafts[card.id] ?? card.style_card_markdown
-    setBusy(true)
-    setNotice(`Approving writing style card for ${card.account_email}...`)
-    try {
-      if (draft !== card.style_card_markdown) {
-        await updateWritingStyleCard(card.id, { style_card_markdown: draft })
-      }
-      await approveWritingStyleCard(card.id)
-      await refreshWritingStyleCards()
-      setNotice(`Writing style card approved for ${card.account_email}. Auto-Respond will use it.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to approve style card for ${card.account_email}.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleDisableWritingStyleCard(card: WritingStyleCard) {
-    setBusy(true)
-    setNotice(`Disabling writing style card for ${card.account_email}...`)
-    try {
-      await disableWritingStyleCard(card.id)
-      await refreshWritingStyleCards()
-      setNotice(`Writing style card disabled for ${card.account_email}.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to disable style card for ${card.account_email}.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function updateAttentionNoteDraft(noteId: number, changes: Partial<AttentionNoteDraft>) {
-    setAttentionNoteDrafts((current) => ({
-      ...current,
-      [noteId]: {
-        ...(current[noteId] ?? { domain: '', label: '', note: '' }),
-        ...changes,
-      },
-    }))
-  }
-
-  async function handleCreateAiDigestAttentionNote() {
-    setBusy(true)
-    setNotice('Adding AI digest attention note...')
-    try {
-      await createAiDigestAttentionNote({
-        domain: newAttentionDomain,
-        label: newAttentionLabel,
-        note: newAttentionNote,
-        enabled: true,
-      })
-      setNewAttentionDomain('')
-      setNewAttentionLabel('')
-      setNewAttentionNote('')
-      await refreshAttentionNotes()
-      setNotice('AI digest attention note added.')
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to add attention note.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleSaveAiDigestAttentionNote(note: AiDigestAttentionNote) {
-    const draft = attentionNoteDrafts[note.id]
-    if (!draft) {
-      return
-    }
-    setBusy(true)
-    setNotice(`Saving AI digest note for ${note.domain}...`)
-    try {
-      await updateAiDigestAttentionNote(note.id, draft)
-      await refreshAttentionNotes()
-      setNotice(`AI digest note saved for ${draft.domain || note.domain}.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to save note for ${note.domain}.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleToggleAiDigestAttentionNote(note: AiDigestAttentionNote) {
-    setBusy(true)
-    setNotice(`${note.enabled ? 'Disabling' : 'Enabling'} AI digest note for ${note.domain}...`)
-    try {
-      await updateAiDigestAttentionNote(note.id, { enabled: !note.enabled })
-      await refreshAttentionNotes()
-      setNotice(`AI digest note ${note.enabled ? 'disabled' : 'enabled'} for ${note.domain}.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to update note for ${note.domain}.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleDeleteAiDigestAttentionNote(note: AiDigestAttentionNote) {
-    setBusy(true)
-    setNotice(`Deleting AI digest note for ${note.domain}...`)
-    try {
-      await deleteAiDigestAttentionNote(note.id)
-      await refreshAttentionNotes()
-      setNotice(`AI digest note deleted for ${note.domain}.`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : `Unable to delete note for ${note.domain}.`)
-    } finally {
-      setBusy(false)
-    }
   }
 
   function updateProtectedKeywordDraft(keywordId: number, changes: Partial<ProtectedKeywordDraft>) {
@@ -1740,99 +1477,6 @@ function App() {
       setNotice(userFacingErrorMessage(error, 'Unable to recover the message.'))
     } finally {
       setBusy(false)
-    }
-  }
-
-  function openAutoResponseModal(message: ReviewMessage) {
-    setAutoResponseMessage(message)
-    setAutoResponseGuidance('')
-    setAutoResponseDraft(null)
-    setAutoResponseDraftBody('')
-    setAutoResponseSendResult(null)
-    setAutoResponseError(null)
-  }
-
-  function closeAutoResponseModal() {
-    if (autoResponseBusy) {
-      return
-    }
-    setAutoResponseMessage(null)
-    setAutoResponseGuidance('')
-    setAutoResponseDraft(null)
-    setAutoResponseDraftBody('')
-    setAutoResponseSendResult(null)
-    setAutoResponseError(null)
-  }
-
-  async function handleGenerateAutoResponseDraft() {
-    if (!autoResponseMessage) {
-      return
-    }
-
-    setAutoResponseBusy(true)
-    setAutoResponseError(null)
-    try {
-      const result = await generateAutoResponseDraft(autoResponseMessage.id, {
-        user_guidance: autoResponseGuidance.trim() || null,
-      })
-      setAutoResponseDraft(result.draft)
-      if (featureFlags.auto_response_send) {
-        const previewResult = await previewAutoResponseSend(autoResponseMessage.id, {
-          draft_body: result.draft.draft_body,
-        })
-        setAutoResponseDraftBody(previewResult.preview.body_text)
-      } else {
-        setAutoResponseDraftBody(result.draft.draft_body)
-      }
-      setAutoResponseSendResult(null)
-      setNotice(`Draft response generated for "${autoResponseMessage.subject}". Review it before sending.`)
-    } catch (error) {
-      setAutoResponseError(userFacingErrorMessage(error, 'Unable to generate a draft response.'))
-    } finally {
-      setAutoResponseBusy(false)
-    }
-  }
-
-  async function handleCopyAutoResponseDraft() {
-    if (!autoResponseDraftBody.trim()) {
-      return
-    }
-
-    try {
-      await navigator.clipboard.writeText(autoResponseDraftBody)
-      setNotice('Draft response copied. Paste it into Gmail when you are ready.')
-    } catch {
-      setNotice('Could not copy automatically. Select the draft text and copy it manually.')
-    }
-  }
-
-  async function handleSendAutoResponse() {
-    if (!autoResponseMessage || !autoResponseDraft || !autoResponseDraftBody.trim()) {
-      return
-    }
-
-    const confirmed = window.confirm(
-      `Send this reply from ${autoResponseMessage.account_email} to ${autoResponseMessage.reply_to || autoResponseMessage.sender}?`,
-    )
-    if (!confirmed) {
-      return
-    }
-
-    setAutoResponseBusy(true)
-    setAutoResponseError(null)
-    try {
-      const result = await sendAutoResponse(autoResponseMessage.id, {
-        idempotency_key: createIdempotencyKey('auto-response-send'),
-        draft_body: autoResponseDraftBody,
-        confirmed: true,
-        include_context: false,
-      })
-      setAutoResponseSendResult(result.send)
-      setNotice(`Reply sent to ${result.send.to_email}.`)
-    } catch (error) {
-      setAutoResponseError(userFacingErrorMessage(error, 'Unable to send the reply.'))
-    } finally {
-      setAutoResponseBusy(false)
     }
   }
 
@@ -2343,16 +1987,6 @@ function App() {
                                       {ACTION_LABELS[action]}
                                     </button>
                                   ))}
-                                  {featureFlags.auto_response_drafts ? (
-                                    <button
-                                      type="button"
-                                      className="queue-rule-button auto-response-button"
-                                      onClick={() => openAutoResponseModal(message)}
-                                      disabled={busy || commitBusy}
-                                    >
-                                      Auto-Respond
-                                    </button>
-                                  ) : null}
                                 </div>
                               </div>
 
@@ -2748,14 +2382,6 @@ function App() {
                     onChange={(event) => updateLocalDigestSettings({ digest_enabled: event.target.checked })}
                   />
                 </label>
-                <label className="settings-field checkbox-field">
-                  <span>AI digest summary</span>
-                  <input
-                    type="checkbox"
-                    checked={notificationSettings.ai_digest_summary_enabled}
-                    onChange={(event) => updateLocalDigestSettings({ ai_digest_summary_enabled: event.target.checked })}
-                  />
-                </label>
                 <label className="settings-field">
                   <span>Send time</span>
                   <input
@@ -2794,9 +2420,6 @@ function App() {
                   ) : null}
                 </label>
               </div>
-              <p className="subtle">
-                AI digest summary sends digest message metadata and snippets to OpenAI to generate a short briefing.
-              </p>
               <div className="card-actions">
                 <button className="button primary" type="button" onClick={() => void handleSaveDigestSettings()} disabled={busy}>
                   Save Digest Settings
@@ -2807,102 +2430,6 @@ function App() {
             <p>Loading digest settings...</p>
           )}
         </article>
-        {featureFlags.writing_style_cards ? (
-          <article className="setting-card writing-style-card">
-            <strong>Writing style</strong>
-            <p className="subtle">
-              Review and edit the private style card Auto-Respond uses when drafting replies.
-            </p>
-            <div className="writing-style-toolbar">
-              <div className="settings-field">
-                <span>Style owner</span>
-                <strong>{signedInStyleEmail}</strong>
-              </div>
-              <div className="card-actions writing-style-toolbar-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={() => void handleCreateWritingStyleCard()}
-                  disabled={busy || !authStatus.user?.email}
-                >
-                  Sample Sent Mail
-                </button>
-              </div>
-            </div>
-            <p className="subtle">
-              Fynish samples your signed-in Gmail Sent mail, derives a private editable card, and leaves approval to you.
-            </p>
-            <div className="writing-style-list">
-              {signedInWritingStyleCards.length === 0 ? (
-                <p className="subtle">
-                  No writing style card exists yet for {signedInStyleEmail}.
-                </p>
-              ) : (
-                signedInWritingStyleCards.map((card) => {
-                  const draft = writingStyleDrafts[card.id] ?? card.style_card_markdown
-                  const hasUnsavedChanges = draft !== card.style_card_markdown
-                  return (
-                    <div className="writing-style-row" key={card.id}>
-                      <div className="attention-note-row-header">
-                        <div>
-                          <strong>{card.account_email}</strong>
-                          <p className="message-meta">
-                            {card.source_provider.replaceAll('_', ' ')} | Updated {formatRelativeDate(card.updated_at)}
-                          </p>
-                        </div>
-                        <div className="account-status-stack">
-                          <span className={`status-pill ${card.status === 'approved' ? 'enabled' : 'disabled'}`}>
-                            {card.status}
-                          </span>
-                          {hasUnsavedChanges ? <span className="count-pill">Unsaved</span> : null}
-                        </div>
-                      </div>
-                      <textarea
-                        className="text-input writing-style-textarea"
-                        value={draft}
-                        onChange={(event) => updateWritingStyleDraft(card.id, event.target.value)}
-                      />
-                      <div className="card-actions">
-                        <button
-                          className="button secondary"
-                          type="button"
-                          onClick={() => void handleSaveWritingStyleCard(card)}
-                          disabled={busy || !hasUnsavedChanges}
-                        >
-                          Save Changes
-                        </button>
-                        <button
-                          className="button primary"
-                          type="button"
-                          onClick={() => void handleApproveWritingStyleCard(card)}
-                          disabled={busy || card.status === 'disabled'}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="button secondary"
-                          type="button"
-                          onClick={() => void handleCreateWritingStyleCard()}
-                          disabled={busy}
-                        >
-                          Resample Sent Mail
-                        </button>
-                        <button
-                          className="button ghost"
-                          type="button"
-                          onClick={() => void handleDisableWritingStyleCard(card)}
-                          disabled={busy || card.status === 'disabled'}
-                        >
-                          Disable
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </article>
-        ) : null}
         <article className="setting-card protected-keywords-card">
           <strong>Spam Rescue protected keywords</strong>
           <p className="subtle">
@@ -2962,126 +2489,6 @@ function App() {
                       className="button ghost"
                       type="button"
                       onClick={() => void handleDeleteSpamRescueProtectedKeyword(keyword)}
-                      disabled={busy}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </article>
-        <article className="setting-card attention-notes-card">
-          <strong>AI digest attention notes</strong>
-          <p className="subtle">
-            Attention notes guide only the AI digest summary. They do not change Gmail actions, queue rules, or auto-cleaning.
-          </p>
-          <div className="attention-note-create-grid">
-            <label className="settings-field">
-              <span>Domain</span>
-              <input
-                className="text-input"
-                type="text"
-                value={newAttentionDomain}
-                placeholder="example.net"
-                onChange={(event) => setNewAttentionDomain(event.target.value)}
-              />
-            </label>
-            <label className="settings-field">
-              <span>Label</span>
-              <input
-                className="text-input"
-                type="text"
-                value={newAttentionLabel}
-                placeholder="Example Security"
-                onChange={(event) => setNewAttentionLabel(event.target.value)}
-              />
-            </label>
-            <label className="settings-field attention-note-wide-field">
-              <span>Note</span>
-              <textarea
-                className="text-input attention-note-textarea"
-                value={newAttentionNote}
-                placeholder="Treat routine status messages as routine unless the subject or preview shows escalation."
-                onChange={(event) => setNewAttentionNote(event.target.value)}
-              />
-            </label>
-            <div className="card-actions attention-note-create-actions">
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => void handleCreateAiDigestAttentionNote()}
-                disabled={busy || !newAttentionDomain.trim() || !newAttentionNote.trim()}
-              >
-                Add Note
-              </button>
-            </div>
-          </div>
-          <div className="attention-notes-list">
-            {aiDigestAttentionNotes.map((note) => {
-              const draft = attentionNoteDrafts[note.id] ?? {
-                domain: note.domain,
-                label: note.label,
-                note: note.note,
-              }
-              return (
-                <div className="attention-note-row" key={note.id}>
-                  <div className="attention-note-row-header">
-                    <strong>{note.label || note.domain}</strong>
-                    <span className={`status-pill ${note.enabled ? 'enabled' : 'disabled'}`}>
-                      {note.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="attention-note-edit-grid">
-                    <label className="settings-field">
-                      <span>Domain</span>
-                      <input
-                        className="text-input"
-                        type="text"
-                        value={draft.domain}
-                        onChange={(event) => updateAttentionNoteDraft(note.id, { domain: event.target.value })}
-                      />
-                    </label>
-                    <label className="settings-field">
-                      <span>Label</span>
-                      <input
-                        className="text-input"
-                        type="text"
-                        value={draft.label}
-                        onChange={(event) => updateAttentionNoteDraft(note.id, { label: event.target.value })}
-                      />
-                    </label>
-                    <label className="settings-field attention-note-wide-field">
-                      <span>Note</span>
-                      <textarea
-                        className="text-input attention-note-textarea"
-                        value={draft.note}
-                        onChange={(event) => updateAttentionNoteDraft(note.id, { note: event.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <div className="card-actions">
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => void handleSaveAiDigestAttentionNote(note)}
-                      disabled={busy}
-                    >
-                      Save
-                    </button>
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => void handleToggleAiDigestAttentionNote(note)}
-                      disabled={busy}
-                    >
-                      {note.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                    <button
-                      className="button ghost"
-                      type="button"
-                      onClick={() => void handleDeleteAiDigestAttentionNote(note)}
                       disabled={busy}
                     >
                       Delete
@@ -3192,125 +2599,6 @@ function App() {
         {view === 'accounts' ? renderAccounts() : null}
         {view === 'settings' ? renderSettings() : null}
       </div>
-      {autoResponseMessage ? (
-        <div className="modal-backdrop" role="presentation">
-          <section
-            className="auto-response-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="auto-response-title"
-          >
-            <div className="auto-response-header">
-              <div>
-                <div className="eyebrow">
-                  {featureFlags.auto_response_send ? 'Reviewed response' : 'Draft-only response'}
-                </div>
-                <h2 id="auto-response-title">Auto-Respond</h2>
-                <p className="message-meta">
-                  {autoResponseMessage.sender} | {autoResponseMessage.subject}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="button secondary"
-                onClick={closeAutoResponseModal}
-                disabled={autoResponseBusy}
-              >
-                Close
-              </button>
-            </div>
-
-            <label className="auto-response-field">
-              <span>Context to include</span>
-              <textarea
-                value={autoResponseGuidance}
-                onChange={(event) => setAutoResponseGuidance(event.target.value)}
-                maxLength={1200}
-                placeholder="Add facts, constraints, tone notes, or the outcome you want the reply to move toward."
-                disabled={autoResponseBusy}
-              />
-            </label>
-
-            <div className="auto-response-actions">
-              <button
-                type="button"
-                className="button primary"
-                onClick={() => void handleGenerateAutoResponseDraft()}
-                disabled={autoResponseBusy}
-              >
-                {autoResponseBusy ? 'Generating...' : autoResponseDraft ? 'Regenerate Draft' : 'Generate Draft'}
-              </button>
-              <span className="message-meta">
-                {featureFlags.auto_response_send
-                  ? 'Review and edit before sending.'
-                  : 'Fynish will not send this message.'}
-              </span>
-            </div>
-
-            {autoResponseError ? <p className="queue-commit-error">{autoResponseError}</p> : null}
-
-            {autoResponseDraft ? (
-              <div className="auto-response-output">
-                <div className="auto-response-output-header">
-                  <strong>Draft response</strong>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={() => void handleCopyAutoResponseDraft()}
-                  >
-                    Copy Draft
-                  </button>
-                </div>
-                <textarea
-                  value={autoResponseDraftBody}
-                  onChange={(event) => {
-                    setAutoResponseDraftBody(event.target.value)
-                    setAutoResponseSendResult(null)
-                  }}
-                  readOnly={autoResponseBusy || Boolean(autoResponseSendResult)}
-                />
-                {featureFlags.auto_response_send ? (
-                  <div className="auto-response-send-panel">
-                    <div>
-                      <strong>Send reviewed reply</strong>
-                      <p className="message-meta">
-                        Sends from {autoResponseMessage.account_email} in the original Gmail thread.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="button primary"
-                      onClick={() => void handleSendAutoResponse()}
-                      disabled={autoResponseBusy || Boolean(autoResponseSendResult) || !autoResponseDraftBody.trim()}
-                    >
-                      {autoResponseBusy ? 'Sending...' : autoResponseSendResult ? 'Sent' : 'Send Reply'}
-                    </button>
-                  </div>
-                ) : null}
-                {autoResponseSendResult ? (
-                  <p className="auto-response-sent">
-                    Sent to {autoResponseSendResult.to_email}
-                    {autoResponseSendResult.gmail_sent_message_id
-                      ? ` | Gmail id ${autoResponseSendResult.gmail_sent_message_id}`
-                      : ''}
-                  </p>
-                ) : null}
-                {autoResponseDraft.caveats.length > 0 ? (
-                  <ul className="reason-list auto-response-caveats">
-                    {autoResponseDraft.caveats.map((caveat) => (
-                      <li key={caveat}>{caveat}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="auto-response-meta">
-                  {autoResponseDraft.model} | {autoResponseDraft.style_source.replaceAll('_', ' ')} |{' '}
-                  {featureFlags.auto_response_send ? 'review required' : 'draft only'}
-                </p>
-              </div>
-            ) : null}
-          </section>
-        </div>
-      ) : null}
       {showScrollTopButton ? (
         <button
           className="scroll-top-button"

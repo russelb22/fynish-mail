@@ -1,9 +1,5 @@
 import type {
   Account,
-  AiDigestAttentionNote,
-  AutoResponseDraft,
-  AutoResponseSend,
-  AutoResponseSendPreview,
   AuthStatus,
   Category,
   DigestSenderStatus,
@@ -23,7 +19,6 @@ import type {
   StagedQueueCommitResponse,
   StagedSpamRescueCommitAction,
   StagedSpamRescueCommitResponse,
-  WritingStyleCard,
 } from './types'
 
 const API_BASE =
@@ -145,36 +140,6 @@ export function fetchDigestSenderStatus() {
   return request<DigestSenderStatus>('/settings/digest-sender')
 }
 
-export function fetchWritingStyleCards() {
-  return request<{ cards: WritingStyleCard[] }>('/settings/writing-style-cards')
-}
-
-export function createWritingStyleCard() {
-  return request<{ card: WritingStyleCard }>('/settings/writing-style-cards', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
-}
-
-export function updateWritingStyleCard(cardId: number, payload: { style_card_markdown: string }) {
-  return request<{ card: WritingStyleCard }>(`/settings/writing-style-cards/${cardId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function approveWritingStyleCard(cardId: number) {
-  return request<{ card: WritingStyleCard }>(`/settings/writing-style-cards/${cardId}/approve`, {
-    method: 'POST',
-  })
-}
-
-export function disableWritingStyleCard(cardId: number) {
-  return request<{ card: WritingStyleCard }>(`/settings/writing-style-cards/${cardId}/disable`, {
-    method: 'POST',
-  })
-}
-
 export function connectMockAccount() {
   return request<{ account: Account }>('/accounts/connect', { method: 'POST' })
 }
@@ -284,37 +249,6 @@ export function fetchNotificationSettings() {
   return request<{ settings: NotificationSettings }>('/settings/notifications')
 }
 
-export function fetchAiDigestAttentionNotes() {
-  return request<{ notes: AiDigestAttentionNote[] }>('/settings/ai-digest-attention-notes')
-}
-
-export function createAiDigestAttentionNote(
-  payload: Pick<AiDigestAttentionNote, 'domain' | 'label' | 'note'> & {
-    enabled?: boolean
-  },
-) {
-  return request<{ note: AiDigestAttentionNote }>('/settings/ai-digest-attention-notes', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function updateAiDigestAttentionNote(
-  noteId: number,
-  payload: Partial<Pick<AiDigestAttentionNote, 'domain' | 'label' | 'note' | 'enabled'>>,
-) {
-  return request<{ note: AiDigestAttentionNote }>(`/settings/ai-digest-attention-notes/${noteId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function deleteAiDigestAttentionNote(noteId: number) {
-  return request<{ deleted: boolean }>(`/settings/ai-digest-attention-notes/${noteId}`, {
-    method: 'DELETE',
-  })
-}
-
 export function fetchSpamRescueProtectedKeywords() {
   return request<{ keywords: SpamRescueProtectedKeyword[] }>('/settings/spam-rescue-protected-keywords')
 }
@@ -363,7 +297,6 @@ export function updateNotificationSettings(
       | 'send_only_if_queue_nonempty'
       | 'digest_enabled'
       | 'digest_time'
-      | 'ai_digest_summary_enabled'
     >
   >,
 ) {
@@ -401,34 +334,6 @@ export function applyAction(messageId: number, action: Category) {
   return request(`/messages/${messageId}/action`, {
     method: 'POST',
     body: JSON.stringify({ action }),
-  })
-}
-
-export function generateAutoResponseDraft(messageId: number, payload: { user_guidance?: string | null }) {
-  return request<{ draft: AutoResponseDraft }>(`/messages/${messageId}/auto-response-draft`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function previewAutoResponseSend(messageId: number, payload: {
-  draft_body: string
-}) {
-  return request<{ preview: AutoResponseSendPreview }>(`/messages/${messageId}/auto-response-send-preview`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function sendAutoResponse(messageId: number, payload: {
-  idempotency_key: string
-  draft_body: string
-  confirmed: boolean
-  include_context?: boolean
-}) {
-  return request<{ send: AutoResponseSend }>(`/messages/${messageId}/auto-response-send`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
   })
 }
 

@@ -20,7 +20,6 @@ DEFAULT_NOTIFICATION_SETTINGS = {
     "send_only_if_queue_nonempty": True,
     "digest_enabled": False,
     "digest_time": "17:00",
-    "ai_digest_summary_enabled": False,
 }
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -45,7 +44,8 @@ def _serialize_row(row) -> dict:
         "send_only_if_queue_nonempty": bool(row["send_only_if_queue_nonempty"]),
         "digest_enabled": bool(row["digest_enabled"]),
         "digest_time": row["digest_time"],
-        "ai_digest_summary_enabled": bool(row["ai_digest_summary_enabled"]),
+        # Compatibility for older clients. Do not change the stored legacy value.
+        "ai_digest_summary_enabled": False,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -140,9 +140,6 @@ def _ensure_notification_settings_for_user(conn, user_id: int, now: str):
             ),
             "digest_enabled": int(DEFAULT_NOTIFICATION_SETTINGS["digest_enabled"]),
             "digest_time": DEFAULT_NOTIFICATION_SETTINGS["digest_time"],
-            "ai_digest_summary_enabled": int(
-                DEFAULT_NOTIFICATION_SETTINGS["ai_digest_summary_enabled"]
-            ),
             "created_at": now,
             "updated_at": now,
         }
@@ -164,7 +161,6 @@ def _ensure_notification_settings_for_user(conn, user_id: int, now: str):
             send_only_if_queue_nonempty,
             digest_enabled,
             digest_time,
-            ai_digest_summary_enabled,
             created_at,
             updated_at
         ) VALUES (
@@ -179,7 +175,6 @@ def _ensure_notification_settings_for_user(conn, user_id: int, now: str):
             :send_only_if_queue_nonempty,
             :digest_enabled,
             :digest_time,
-            :ai_digest_summary_enabled,
             :created_at,
             :updated_at
         )
@@ -199,10 +194,6 @@ def _ensure_notification_settings_for_user(conn, user_id: int, now: str):
             ),
             "digest_time": source.get(
                 "digest_time", DEFAULT_NOTIFICATION_SETTINGS["digest_time"]
-            ),
-            "ai_digest_summary_enabled": source.get(
-                "ai_digest_summary_enabled",
-                int(DEFAULT_NOTIFICATION_SETTINGS["ai_digest_summary_enabled"]),
             ),
             "created_at": source["created_at"],
             "updated_at": source["updated_at"],
@@ -282,11 +273,6 @@ def update_notification_settings(changes: dict, user_id: int | None = None) -> d
         updates["digest_time"] = _validate_time(
             str(changes["digest_time"]).strip(),
             "digest_time",
-        )
-
-    if "ai_digest_summary_enabled" in changes:
-        updates["ai_digest_summary_enabled"] = int(
-            bool(changes["ai_digest_summary_enabled"])
         )
 
     now = _now_iso()

@@ -36,6 +36,10 @@ def test_notification_settings_defaults_are_seeded(isolated_db):
 
 
 def test_notification_settings_update_persists_changes(isolated_db):
+    get_notification_settings()
+    with get_connection() as conn:
+        conn.execute("UPDATE notification_settings_by_user SET ai_digest_summary_enabled = 1")
+
     updated = update_notification_settings(
         {
             "enabled": True,
@@ -46,7 +50,7 @@ def test_notification_settings_update_persists_changes(isolated_db):
             "send_only_if_queue_nonempty": False,
             "digest_enabled": True,
             "digest_time": "18:30",
-            "ai_digest_summary_enabled": True,
+            "ai_digest_summary_enabled": False,
         }
     )
     assert updated["enabled"] is True
@@ -57,7 +61,7 @@ def test_notification_settings_update_persists_changes(isolated_db):
     assert updated["send_only_if_queue_nonempty"] is False
     assert updated["digest_enabled"] is True
     assert updated["digest_time"] == "18:30"
-    assert updated["ai_digest_summary_enabled"] is True
+    assert updated["ai_digest_summary_enabled"] is False
 
     reloaded = get_notification_settings()
     assert reloaded == updated

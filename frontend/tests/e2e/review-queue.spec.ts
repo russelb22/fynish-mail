@@ -13,6 +13,16 @@ async function enableMockAccounts(page: import('@playwright/test').Page) {
 
 test.describe.configure({ mode: 'serial' })
 
+test('settings retain the standard digest without AI controls', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByLabel('Enable daily digest')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save Digest Settings' })).toBeVisible()
+  await expect(page.getByText('AI digest summary', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('AI digest attention notes', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Writing style', { exact: true })).toHaveCount(0)
+})
+
 test('review queue loads mocked accounts and compact empty category chips', async ({
   page,
 }) => {

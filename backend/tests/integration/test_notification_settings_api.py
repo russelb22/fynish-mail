@@ -34,7 +34,7 @@ def test_notification_settings_endpoint_updates_values(api_client):
     assert payload["evening_time"] == "17:05"
     assert payload["digest_enabled"] is True
     assert payload["digest_time"] == "18:20"
-    assert payload["ai_digest_summary_enabled"] is True
+    assert payload["ai_digest_summary_enabled"] is False
 
 
 def test_notification_settings_endpoint_rejects_bad_timezone(api_client):
